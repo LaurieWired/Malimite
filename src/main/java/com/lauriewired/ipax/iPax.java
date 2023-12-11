@@ -1,5 +1,4 @@
-package com.lauriewired.ipax;
-
+package src.main.java;
 import javax.swing.*;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.tree.*;
@@ -7,10 +6,11 @@ import java.awt.*;
 import java.awt.datatransfer.*;
 import java.awt.dnd.*;
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.zip.*;
 
-import com.dd.plist.*;
 
 public class iPax extends JFrame {
 
@@ -229,13 +229,13 @@ public class iPax extends JFrame {
                 String contentText = readContentFromZip(currentFilePath, fileEntriesMap.get(fullPath.toString()));
 
                 // Decode if it's a binary plist. Otherwise, just print the text
-                /*
-                if (fullPath.toString().endsWith("plist") && isBinaryPlist(contentBytes)) {
-                    System.out.println("Handling binary property list");
-                    contentText = decodePropertyList(contentBytes);
-                }*/
+                if (contentText.startsWith("bplist")) {
+                    System.out.println("Handling property list");
+                    fileContentArea.setText(decodePropertyList(contentText));
+                } else {
+                    fileContentArea.setText(contentText);
+                }
 
-                fileContentArea.setText(contentText);
                 fileContentArea.setCaretPosition(0);
             } catch (IOException ex) {
                 ex.printStackTrace();
@@ -243,20 +243,7 @@ public class iPax extends JFrame {
         }
     }
 
-    private String decodePropertyList(byte[] plistData) {
-        try {
-            NSObject plist = PropertyListParser.parse(plistData);
-    
-            // Convert property list to a JSON-like string
-            return plist.toJavaObject().toString();
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
+    private String decodePropertyList(String propertyList) {
+        
     }
-
-    private boolean isBinaryPlist(byte[] contentBytes) {
-        String header = new String(Arrays.copyOf(contentBytes, "bplist".length()));
-        return header.equals("bplist");
-    }    
 }
