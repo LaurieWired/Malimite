@@ -71,47 +71,56 @@ public class FileProcessing {
         }
         return new byte[0]; // Return empty array if the entry is not found
     }
-    
+
     /*
-    private void processExecutable() {
-        if (this.currentFilePath == null || this.currentFilePath.isEmpty() || 
-            this.infoPlistBundleExecutable == null || this.infoPlistBundleExecutable.isEmpty()) {
+     * Extracts a macho binary from an IPA file to a new project directory
+     * Returns the name of the new project directory
+     */
+    public static String extractMachoToProjectDirectory(String filePath, String executableName, String projectDirectoryPath) {
+        if (filePath == null || filePath.isEmpty() || 
+            executableName == null || executableName.isEmpty()) {
             System.out.println("Failed to extract executable");
-            return;
+            return "";
         }
 
-        System.out.println(this.currentFilePath + " " + this.infoPlistBundleExecutable);
+        System.out.println(filePath + " " + executableName);
 
         // Extract the base name of the .ipa file
-        File ipaFile = new File(this.currentFilePath);
+        File ipaFile = new File(filePath);
         String baseName = ipaFile.getName().replaceFirst("[.][^.]+$", "");
-        this.projectDirectoryPath = ipaFile.getParent() + File.separator + baseName + "_ipax";
-
+        return ipaFile.getParent() + File.separator + baseName + "_ipax";
+    }
+    
+    /*
+     * Creates a new ipax project if it doesn't exist
+     * Otherwise, reopens an existing project
+     */
+    public static void openProject(String filePath, String projectDirectoryPath, String executableName) {
         // Create ipax project directory
-        File projectDirectory = new File(this.projectDirectoryPath);
+        File projectDirectory = new File(projectDirectoryPath);
         if (!projectDirectory.exists()) {
             if (projectDirectory.mkdir()) {
-                System.out.println("Created project directory: " + this.projectDirectoryPath);
+                System.out.println("Created project directory: " + projectDirectoryPath);
             } else {
-                System.out.println("Failed to create project directory: " + this.projectDirectoryPath);
+                System.out.println("Failed to create project directory: " + projectDirectoryPath);
                 return;
             }
 
             // Unzip the executable into the new project directory
             // Unfortunately we have to extract it for ghidra to process it in headless mode
-            String outputFilePath = this.projectDirectoryPath + File.separator + this.infoPlistBundleExecutable;
+            String outputFilePath = projectDirectoryPath + File.separator + executableName;
             try {
-                unzipExecutable(this.currentFilePath, this.infoPlistBundleExecutable, outputFilePath);
+                unzipExecutable(filePath, executableName, outputFilePath);
             } catch (IOException e) {
                 e.printStackTrace();
             }
         } else {
             //TODO: add handling for reopening an existing ipax project
-            System.out.println("Project '" + this.ghidraProjectName + "' already exists.");
+            //System.out.println("Project '" + this.ghidraProjectName + "' already exists.");
 
             //will need to add project name + classes + xrefs + user comments
             //reopening will populate this into ipax
             //maybe should add resource node structure here as an optimization
         }
-    }*/
+    }
 }

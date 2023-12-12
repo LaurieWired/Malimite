@@ -118,7 +118,9 @@ public class iPax extends JFrame {
             System.out.println("Finished extracting resources");
 
             // Populate the classes based on the main executable macho
-            //processExecutable();
+            this.projectDirectoryPath = FileProcessing.extractMachoToProjectDirectory(this.currentFilePath, 
+                this.infoPlist.getExecutableName(), this.projectDirectoryPath);
+            FileProcessing.openProject(this.currentFilePath, this.projectDirectoryPath, this.infoPlist.getExecutableName());
             //runGhidraCommand();
     
             treeModel.reload();
