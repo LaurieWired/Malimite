@@ -1,0 +1,63 @@
+# Compiled Java classes
+/target/
+/bin/
+
+# Package files
+*.jar
+*.war
+*.ear
+
+# Maven specific
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+
+# Maven wrapper files
+.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+.mvn/wrapper/MavenWrapperDownloader.java
+
+# IDE specific files
+/.idea/
+*.iml
+*.iws
+*.ipr
+*.swp
+*~.nib
+local.properties
+.loadpath
+
+# Eclipse specific
+.classpath
+.project
+.settings/
+
+# NetBeans specific
+/nbproject/private/
+/build/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# VS Code specific
+.vscode/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Other files to ignore
+*.class
+*~
+*.bak
+*.swp
+*.tmp

@@ -7,14 +7,13 @@ import java.awt.*;
 import java.awt.datatransfer.*;
 import java.awt.dnd.*;
 import java.io.*;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.*;
 import java.util.zip.*;
 
-import com.dd.plist.*;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.lauriewired.ipax.utils.NodeOperations;
+import com.lauriewired.ipax.utils.FileProcessing;
+import com.lauriewired.ipax.utils.PlistUtils;
+import com.lauriewired.ipax.files.InfoPlist;
 
 public class iPax extends JFrame {
 
@@ -24,13 +23,8 @@ public class iPax extends JFrame {
     private JTree fileTree;
     private Map<String, String> fileEntriesMap;
     private String currentFilePath; // Path to the file being analyzed
-    private String infoPlistBundleExecutable; // CFBundleExecutable from Info.plist
     private String projectDirectoryPath;
-    private String ghidraProjectName;
-
-    // Mach-O Magic Numbers
-    private static final int FAT_MAGIC = 0xcafebabe;
-    private static final int FAT_CIGAM = 0xbebafeca;
+    private InfoPlist infoPlist;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new iPax().setVisible(true));
@@ -124,183 +118,13 @@ public class iPax extends JFrame {
             System.out.println("Finished extracting resources");
 
             // Populate the classes based on the main executable macho
-            processExecutable();
+            //processExecutable();
+            //runGhidraCommand();
     
             treeModel.reload();
-            collapseAllTreeNodes();
+            NodeOperations.collapseAllTreeNodes(this.fileTree);
         } catch (IOException e) {
             e.printStackTrace();
-        }
-    }
-
-    private void processExecutable() {
-        if (this.currentFilePath == null || this.currentFilePath.isEmpty() || 
-            this.infoPlistBundleExecutable == null || this.infoPlistBundleExecutable.isEmpty()) {
-            System.out.println("Failed to extract executable");
-            return;
-        }
-
-        System.out.println(this.currentFilePath + " " + this.infoPlistBundleExecutable);
-
-        // Extract the base name of the .ipa file
-        File ipaFile = new File(this.currentFilePath);
-        String baseName = ipaFile.getName().replaceFirst("[.][^.]+$", "");
-        this.projectDirectoryPath = ipaFile.getParent() + File.separator + baseName + "_ipax";
-
-        // Create ipax project directory
-        File projectDirectory = new File(this.projectDirectoryPath);
-        if (!projectDirectory.exists()) {
-            if (projectDirectory.mkdir()) {
-                System.out.println("Created project directory: " + this.projectDirectoryPath);
-            } else {
-                System.out.println("Failed to create project directory: " + this.projectDirectoryPath);
-                return;
-            }
-
-            // Unzip the executable into the new project directory
-            // Unfortunately we have to extract it for ghidra to process it in headless mode
-            String outputFilePath = this.projectDirectoryPath + File.separator + this.infoPlistBundleExecutable;
-            try {
-                unzipExecutable(this.currentFilePath, this.infoPlistBundleExecutable, outputFilePath);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-            runGhidraCommand();
-        } else {
-            //TODO: add handling for reopening an existing ipax project
-            System.out.println("Project '" + this.ghidraProjectName + "' already exists.");
-
-            //will need to add project name + classes + xrefs + user comments
-            //reopening will populate this into ipax
-            //maybe should add resource node structure here as an optimization
-        }
-    }
-
-    private void runGhidraCommand() {
-        this.ghidraProjectName = this.infoPlistBundleExecutable + "_ipax";
-        String executableFilePath = this.projectDirectoryPath + File.separator + this.infoPlistBundleExecutable;
-
-        // See if we're dealing with a FAT binary and need to select architecture
-        analyzeMachOFile(executableFilePath);
-
-        try {
-            //FIXME why is this not seeing my env vars
-            //FIXME do we have to write the ghidra scripts to the ghidra_scripts folder
-            ProcessBuilder builder = new ProcessBuilder(
-                "C:\\Users\\Laurie\\Documents\\GitClones\\ghidra_10.4_PUBLIC\\support\\analyzeHeadless.bat",
-                this.projectDirectoryPath,
-                this.ghidraProjectName,
-                "-import",
-                executableFilePath,
-                "-postScript",
-                "ParseClasses.java" //TODO: also run name demangler if this is a swift binary
-            );
-
-            //FIXME need to let user decide which architecture to pull from the fat binary and pass the selection to ghidra
-
-            System.out.println("Running: " + builder.command().toString());
-            
-            Process process = builder.start();
-
-            // Read output and error streams
-            readStream(process.getInputStream());
-            readStream(process.getErrorStream());
-
-            process.waitFor();
-            System.out.println("Done with ghidra analysis");
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private static void analyzeMachOFile(String filePath) {
-        File file = new File(filePath);
-
-        try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
-            int magic = raf.readInt();
-            if (magic == FAT_MAGIC || magic == FAT_CIGAM) {
-                System.out.println("Detected FAT binary with architectures:");
-
-                // Adjust byte order for reading
-                boolean reverseByteOrder = (magic == FAT_CIGAM);
-                ByteBuffer buffer = ByteBuffer.allocate(4);
-                buffer.order(reverseByteOrder ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN);
-
-                int archCount = reverseByteOrder ? Integer.reverseBytes(raf.readInt()) : raf.readInt();
-                for (int i = 0; i < archCount; i++) {
-                    raf.seek(8L + i * 20L); // Skip to the architecture info
-                    int cpuType = reverseByteOrder ? Integer.reverseBytes(raf.readInt()) : raf.readInt();
-                    int cpuSubType = reverseByteOrder ? Integer.reverseBytes(raf.readInt()) : raf.readInt();
-                    printArchitecture(cpuType, cpuSubType);
-
-                    System.out.println("cpuType: " + cpuType);
-                    System.out.println("cpuSubType: " + cpuSubType);
-                }
-            } else {
-                System.out.println("This is not a FAT (Universal) binary.");
-            }
-        } catch (IOException e) {
-            System.err.println("Error reading file: " + e.getMessage());
-        }
-    }
-
-    private static void printArchitecture(int cpuType, int cpuSubType) {
-        // Expand this method to handle different subtypes
-        String arch = "Unknown";
-        switch (cpuType) {
-            case 0x00000007: // Intel x86
-                arch = "Intel x86";
-                break;
-            case 0x01000007: // Intel x86_64
-                arch = "Intel x86_64";
-                break;
-            case 0x0000000C: // ARM
-                arch = "ARM";
-                break;
-            case 0x0100000C: // ARM64
-                arch = "ARM64";
-                break;
-        }
-
-        System.out.println(arch + " " + cpuSubType);
-    }
-
-    private static void readStream(InputStream stream) {
-        new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }).start();
-    }
-
-    private void unzipExecutable(String zipFilePath, String executableName, String outputFilePath) throws IOException {
-        try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(zipFilePath))) {
-            ZipEntry entry = zipIn.getNextEntry();
-            while (entry != null) {
-                if (!entry.isDirectory() && entry.getName().endsWith(executableName)) {
-                    extractFile(zipIn, outputFilePath);
-                    break;
-                }
-                zipIn.closeEntry();
-                entry = zipIn.getNextEntry();
-            }
-        }
-    }
-
-    private void extractFile(ZipInputStream zipIn, String filePath) throws IOException {
-        try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(filePath))) {
-            byte[] bytesIn = new byte[4096]; //TODO: remove magic number
-            int read;
-            while ((read = zipIn.read(bytesIn)) != -1) {
-                bos.write(bytesIn, 0, read);
-            }
         }
     }
     
@@ -311,120 +135,24 @@ public class iPax extends JFrame {
         if (relativePath.equals("Info.plist")) {
             currentNode = new DefaultMutableTreeNode("Info.plist");
             appNode.add(currentNode);
-            fileEntriesMap.put(buildFullPathFromNode(currentNode), entry.getName());
-            handleInfoPlist(currentNode);
+            fileEntriesMap.put(NodeOperations.buildFullPathFromNode(currentNode), entry.getName());
+            this.infoPlist = new InfoPlist(currentNode, this.currentFilePath, this.fileEntriesMap);
         } else {
             // Create or get the "Resources" node and add other files to it
-            currentNode = addOrGetNode(appNode, "Resources", true);
+            currentNode = NodeOperations.addOrGetNode(appNode, "Resources", true);
     
             // Skip the first part of the path if it's a directory
             String[] pathParts = relativePath.split("/");
             for (int i = (entry.isDirectory() ? 1 : 0); i < pathParts.length; i++) {
                 boolean isDirectory = i < pathParts.length - 1 || entry.isDirectory();
-                currentNode = addOrGetNode(currentNode, pathParts[i], isDirectory);
+                currentNode = NodeOperations.addOrGetNode(currentNode, pathParts[i], isDirectory);
     
                 if (!isDirectory) {
-                    fileEntriesMap.put(buildFullPathFromNode(currentNode), entry.getName());
+                    this.fileEntriesMap.put(NodeOperations.buildFullPathFromNode(currentNode), entry.getName());
                 }
             }
         }
     }
-
-    private void handleInfoPlist(DefaultMutableTreeNode infoPlistNode) {
-        try {
-            String infoPlistPath = buildFullPathFromNode(infoPlistNode);
-            byte[] plistData = readContentFromZip(currentFilePath, fileEntriesMap.get(infoPlistPath));
-    
-            if (isBinaryPlist(plistData)) {
-                // Handle binary plist
-                NSObject plist = PropertyListParser.parse(plistData);
-                extractCFBundleExecutable(plist);
-            } else {
-                // Handle XML plist
-                String plistContent = new String(plistData);
-                NSObject plist = PropertyListParser.parse(plistContent.getBytes());
-                extractCFBundleExecutable(plist);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void extractCFBundleExecutable(NSObject plist) {
-        if (plist instanceof NSDictionary) {
-            NSDictionary dict = (NSDictionary) plist;
-            String executableName = dict.objectForKey("CFBundleExecutable").toString();
-
-            this.infoPlistBundleExecutable = executableName;
-            System.out.println("CFBundleExecutable: " + executableName);
-        }
-    }
-    
-    private void collapseAllTreeNodes() {
-        for (int i = 0; i < fileTree.getRowCount(); i++) {
-            fileTree.collapseRow(i);
-        }
-    }
-    
-
-    private String buildFullPathFromNode(TreeNode node) {
-        StringBuilder fullPath = new StringBuilder();
-        String nodeString = "";
-        
-        while (node != null) {
-            nodeString = node.toString();
-
-            // Avoid adding the prepended "Files" node
-            if (node.getParent() != null && nodeString != "Hidden") {
-                //System.out.println("fullPath: " + fullPath.toString());
-                //System.out.println("node: " + nodeString);
-
-                // Insert slash into path only if needed
-                if (fullPath.length() > 0 && fullPath.charAt(0) != '/' && nodeString.charAt(nodeString.length() - 1) != '/') {
-                    fullPath.insert(0, "/");
-                }
-                fullPath.insert(0, nodeString);
-            }
-
-            node = node.getParent();
-        }
-        return fullPath.toString();
-    }    
-
-    private byte[] readContentFromZip(String zipFilePath, String entryPath) throws IOException {
-        try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(zipFilePath))) {
-            ZipEntry entry = zipIn.getNextEntry();
-    
-            while (entry != null) {
-                if (entry.getName().equals(entryPath)) {
-                    ByteArrayOutputStream out = new ByteArrayOutputStream();
-                    byte[] buffer = new byte[1024];
-                    int len;
-                    while ((len = zipIn.read(buffer)) > 0) {
-                        out.write(buffer, 0, len);
-                    }
-                    return out.toByteArray();
-                }
-                zipIn.closeEntry();
-                entry = zipIn.getNextEntry();
-            }
-        }
-        return new byte[0]; // Return empty array if the entry is not found
-    }    
-
-    private DefaultMutableTreeNode addOrGetNode(DefaultMutableTreeNode parentNode, String nodeName, boolean isDirectory) {
-        Enumeration<TreeNode> children = parentNode.children();
-        while (children.hasMoreElements()) {
-            DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) children.nextElement();
-            if (childNode.getUserObject().equals(nodeName) && childNode.getAllowsChildren() == isDirectory) {
-                return childNode;
-            }
-        }
-    
-        DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(nodeName, isDirectory);
-        parentNode.add(newNode);
-        return newNode;
-    }    
 
     private void displaySelectedFileContent(TreeSelectionEvent e) {
         TreePath path = e.getPath();
@@ -443,13 +171,13 @@ public class iPax extends JFrame {
 
         if (this.currentFilePath != null) {
             try {
-                byte[] contentBytes = readContentFromZip(currentFilePath, fileEntriesMap.get(fullPath.toString()));
+                byte[] contentBytes = FileProcessing.readContentFromZip(this.currentFilePath, fileEntriesMap.get(fullPath.toString()));
                 String contentText;
         
                 // Decode if it's a binary plist. Otherwise, just print the text
-                if (fullPath.toString().endsWith("plist") && isBinaryPlist(contentBytes)) {
+                if (fullPath.toString().endsWith("plist") && PlistUtils.isBinaryPlist(contentBytes)) {
                     System.out.println("Handling binary property list");
-                    contentText = decodePropertyList(contentBytes);
+                    contentText = PlistUtils.decodeBinaryPropertyList(contentBytes);
                 } else {
                     contentText = new String(contentBytes);
                 }
@@ -461,26 +189,4 @@ public class iPax extends JFrame {
             }
         }
     }
-
-    private String decodePropertyList(byte[] plistData) {
-        try {
-            NSObject plist = PropertyListParser.parse(plistData);
-            Object javaObj = plist.toJavaObject();
-    
-            // Use Gson to format it as a JSON string
-            Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            return gson.toJson(javaObj);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    private boolean isBinaryPlist(byte[] contentBytes) {
-        if (contentBytes.length < "bplist".length()) {
-            return false;
-        }
-        String header = new String(Arrays.copyOf(contentBytes, "bplist".length()));
-        return header.equals("bplist");
-    }   
 }
