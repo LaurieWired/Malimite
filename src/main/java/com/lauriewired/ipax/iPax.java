@@ -14,6 +14,7 @@ import com.lauriewired.ipax.utils.NodeOperations;
 import com.lauriewired.ipax.utils.FileProcessing;
 import com.lauriewired.ipax.utils.PlistUtils;
 import com.lauriewired.ipax.files.InfoPlist;
+import com.lauriewired.ipax.decompile.GhidraProject;
 
 public class iPax extends JFrame {
 
@@ -25,6 +26,8 @@ public class iPax extends JFrame {
     private String currentFilePath; // Path to the file being analyzed
     private String projectDirectoryPath;
     private InfoPlist infoPlist;
+    private GhidraProject ghidraProject;
+    private String executableFilePath; // Path to the main macho file for this app
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new iPax().setVisible(true));
@@ -121,7 +124,11 @@ public class iPax extends JFrame {
             this.projectDirectoryPath = FileProcessing.extractMachoToProjectDirectory(this.currentFilePath, 
                 this.infoPlist.getExecutableName(), this.projectDirectoryPath);
             FileProcessing.openProject(this.currentFilePath, this.projectDirectoryPath, this.infoPlist.getExecutableName());
-            //runGhidraCommand();
+
+            // Run ghidra command to perform the decompilation
+            ghidraProject = new GhidraProject(this.infoPlist.getExecutableName());
+            this.executableFilePath = this.projectDirectoryPath + File.separator + this.infoPlist.getExecutableName();
+            ghidraProject.runGhidraCommand(this.executableFilePath, this.projectDirectoryPath);
     
             treeModel.reload();
             NodeOperations.collapseAllTreeNodes(this.fileTree);

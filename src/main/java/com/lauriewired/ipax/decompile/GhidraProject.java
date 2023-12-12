@@ -2,23 +2,27 @@ package com.lauriewired.ipax.decompile;
 
 import java.io.File;
 
-public class GhidraBridge {
+import com.lauriewired.ipax.utils.FileProcessing;
+import com.lauriewired.ipax.utils.MachoUtils;
+
+public class GhidraProject {
     private String ghidraProjectName;
 
-    /*
-    private void runGhidraCommand() {
-        this.ghidraProjectName = this.infoPlistBundleExecutable + "_ipax";
-        String executableFilePath = this.projectDirectoryPath + File.separator + this.infoPlistBundleExecutable;
+    public GhidraProject(String infoPlistBundleExecutable) {
+        this.ghidraProjectName = infoPlistBundleExecutable + "_ipax";
+    }
+
+    public void runGhidraCommand(String executableFilePath, String projectDirectoryPath) {
 
         // See if we're dealing with a FAT binary and need to select architecture
-        analyzeMachOFile(executableFilePath);
+        MachoUtils.analyzeMachOFile(executableFilePath);
 
         try {
             //FIXME why is this not seeing my env vars
             //FIXME do we have to write the ghidra scripts to the ghidra_scripts folder
             ProcessBuilder builder = new ProcessBuilder(
                 "C:\\Users\\Laurie\\Documents\\GitClones\\ghidra_10.4_PUBLIC\\support\\analyzeHeadless.bat",
-                this.projectDirectoryPath,
+                projectDirectoryPath,
                 this.ghidraProjectName,
                 "-import",
                 executableFilePath,
@@ -33,8 +37,8 @@ public class GhidraBridge {
             Process process = builder.start();
 
             // Read output and error streams
-            readStream(process.getInputStream());
-            readStream(process.getErrorStream());
+            FileProcessing.readStream(process.getInputStream());
+            FileProcessing.readStream(process.getErrorStream());
 
             process.waitFor();
             System.out.println("Done with ghidra analysis");
@@ -42,5 +46,5 @@ public class GhidraBridge {
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }*/
+    }
 }
