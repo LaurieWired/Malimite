@@ -126,9 +126,9 @@ public class iPax extends JFrame {
             FileProcessing.openProject(this.currentFilePath, this.projectDirectoryPath, this.infoPlist.getExecutableName());
 
             // Run ghidra command to perform the decompilation
-            ghidraProject = new GhidraProject(this.infoPlist.getExecutableName());
             this.executableFilePath = this.projectDirectoryPath + File.separator + this.infoPlist.getExecutableName();
-            ghidraProject.runGhidraCommand(this.executableFilePath, this.projectDirectoryPath);
+            ghidraProject = new GhidraProject(this.infoPlist.getExecutableName(), this.executableFilePath);
+            ghidraProject.decompileMacho(this.executableFilePath, this.projectDirectoryPath);
     
             treeModel.reload();
             NodeOperations.collapseAllTreeNodes(this.fileTree);

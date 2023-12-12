@@ -1,22 +1,27 @@
 package com.lauriewired.ipax.decompile;
 
-import java.io.File;
-
 import com.lauriewired.ipax.utils.FileProcessing;
-import com.lauriewired.ipax.utils.MachoUtils;
+import com.lauriewired.ipax.files.Macho;
 
 public class GhidraProject {
     private String ghidraProjectName;
+    private Macho projectMacho;
 
-    public GhidraProject(String infoPlistBundleExecutable) {
+    public GhidraProject(String infoPlistBundleExecutable, String executableFilePath) {
         this.ghidraProjectName = infoPlistBundleExecutable + "_ipax";
+        this.projectMacho = new Macho(executableFilePath);
     }
 
-    public void runGhidraCommand(String executableFilePath, String projectDirectoryPath) {
+    public void decompileMacho(String executableFilePath, String projectDirectoryPath) {
+        if (this.projectMacho.isFatBinary()) {
+            this.projectMacho.processFatMacho();
+            executeGhidraCommand(executableFilePath, projectDirectoryPath);
+        } else {
+            executeGhidraCommand(executableFilePath, projectDirectoryPath);
+        }
+    }
 
-        // See if we're dealing with a FAT binary and need to select architecture
-        MachoUtils.analyzeMachOFile(executableFilePath);
-
+    private void executeGhidraCommand(String executableFilePath, String projectDirectoryPath) {
         try {
             //FIXME why is this not seeing my env vars
             //FIXME do we have to write the ghidra scripts to the ghidra_scripts folder
