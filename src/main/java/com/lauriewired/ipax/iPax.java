@@ -9,11 +9,13 @@ import java.awt.dnd.*;
 import java.io.*;
 import java.util.*;
 import java.util.zip.*;
+import java.util.List;
 
 import com.lauriewired.ipax.utils.NodeOperations;
 import com.lauriewired.ipax.utils.FileProcessing;
 import com.lauriewired.ipax.utils.PlistUtils;
 import com.lauriewired.ipax.files.InfoPlist;
+import com.lauriewired.ipax.files.Macho;
 import com.lauriewired.ipax.decompile.GhidraProject;
 
 public class iPax extends JFrame {
@@ -28,6 +30,7 @@ public class iPax extends JFrame {
     private InfoPlist infoPlist;
     private GhidraProject ghidraProject;
     private String executableFilePath; // Path to the main macho file for this app
+    private Macho projectMacho;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new iPax().setVisible(true));
@@ -127,14 +130,36 @@ public class iPax extends JFrame {
 
             // Run ghidra command to perform the decompilation
             this.executableFilePath = this.projectDirectoryPath + File.separator + this.infoPlist.getExecutableName();
+
+            this.projectMacho = new Macho(executableFilePath, this.projectDirectoryPath, this.infoPlist.getExecutableName());
             ghidraProject = new GhidraProject(this.infoPlist.getExecutableName(), this.executableFilePath);
-            ghidraProject.decompileMacho(this.executableFilePath, this.projectDirectoryPath);
+    
+            // Let the user select the architecture if it is a FAT binary
+            if (this.projectMacho.isFatBinary()) {
+                List<String> architectures = this.projectMacho.getArchitectureStrings();
+                String selectedArchitecture = selectArchitecture(architectures);
+                if (selectedArchitecture != null) {
+                    this.projectMacho.processFatMacho(selectedArchitecture);
+                }
+            }
+            this.projectMacho.printArchitectures();
+            ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, this.projectMacho);
     
             treeModel.reload();
             NodeOperations.collapseAllTreeNodes(this.fileTree);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private String selectArchitecture(List<String> architectures) {
+        JComboBox<String> architectureComboBox = new JComboBox<>(architectures.toArray(new String[0]));
+        int result = JOptionPane.showConfirmDialog(null, architectureComboBox, "Select Architecture", 
+                                                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (result == JOptionPane.OK_OPTION) {
+            return (String) architectureComboBox.getSelectedItem();
+        }
+        return null;
     }
     
     private void handleEntry(ZipEntry entry, DefaultMutableTreeNode appNode, ZipInputStream zipIn) throws IOException {

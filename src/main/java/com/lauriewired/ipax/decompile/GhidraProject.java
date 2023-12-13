@@ -5,23 +5,12 @@ import com.lauriewired.ipax.files.Macho;
 
 public class GhidraProject {
     private String ghidraProjectName;
-    private Macho projectMacho;
 
     public GhidraProject(String infoPlistBundleExecutable, String executableFilePath) {
         this.ghidraProjectName = infoPlistBundleExecutable + "_ipax";
-        this.projectMacho = new Macho(executableFilePath);
     }
 
-    public void decompileMacho(String executableFilePath, String projectDirectoryPath) {
-        if (this.projectMacho.isFatBinary()) {
-            this.projectMacho.processFatMacho();
-            executeGhidraCommand(executableFilePath, projectDirectoryPath);
-        } else {
-            executeGhidraCommand(executableFilePath, projectDirectoryPath);
-        }
-    }
-
-    private void executeGhidraCommand(String executableFilePath, String projectDirectoryPath) {
+    public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho) {
         try {
             //FIXME why is this not seeing my env vars
             //FIXME do we have to write the ghidra scripts to the ghidra_scripts folder
