@@ -192,4 +192,8 @@ public class Macho {
     public boolean isFatBinary() {
         return this.isFat;
     }
+
+    public String getMachoExecutableName() {
+        return this.machoExecutableName;
+    }
 }

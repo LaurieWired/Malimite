@@ -17,6 +17,7 @@ import com.lauriewired.ipax.utils.PlistUtils;
 import com.lauriewired.ipax.files.InfoPlist;
 import com.lauriewired.ipax.files.Macho;
 import com.lauriewired.ipax.decompile.GhidraProject;
+import com.lauriewired.ipax.database.SQLiteDBHandler;
 
 public class iPax extends JFrame {
 
@@ -123,33 +124,43 @@ public class iPax extends JFrame {
             }
             System.out.println("Finished extracting resources");
 
-            // Populate the classes based on the main executable macho
-            this.projectDirectoryPath = FileProcessing.extractMachoToProjectDirectory(this.currentFilePath, 
-                this.infoPlist.getExecutableName(), this.projectDirectoryPath);
-            FileProcessing.openProject(this.currentFilePath, this.projectDirectoryPath, this.infoPlist.getExecutableName());
-
-            // Run ghidra command to perform the decompilation
-            this.executableFilePath = this.projectDirectoryPath + File.separator + this.infoPlist.getExecutableName();
-
-            this.projectMacho = new Macho(executableFilePath, this.projectDirectoryPath, this.infoPlist.getExecutableName());
-            ghidraProject = new GhidraProject(this.infoPlist.getExecutableName(), this.executableFilePath);
-    
-            // Let the user select the architecture if it is a FAT binary
-            if (this.projectMacho.isFatBinary()) {
-                List<String> architectures = this.projectMacho.getArchitectureStrings();
-                String selectedArchitecture = selectArchitecture(architectures);
-                if (selectedArchitecture != null) {
-                    this.projectMacho.processFatMacho(selectedArchitecture);
-                }
-            }
-            this.projectMacho.printArchitectures();
-            ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, this.projectMacho);
+            initializeGhidraProject();
+            populateDatabase();
     
             treeModel.reload();
             NodeOperations.collapseAllTreeNodes(this.fileTree);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void populateDatabase() {
+        SQLiteDBHandler dbHandler = new SQLiteDBHandler(this.projectMacho.getMachoExecutableName() + "_ipax.db");
+        dbHandler.populateFromProjectDirectory();
+    }
+
+    private void initializeGhidraProject() {
+        // Populate the classes based on the main executable macho
+        this.projectDirectoryPath = FileProcessing.extractMachoToProjectDirectory(this.currentFilePath, 
+            this.infoPlist.getExecutableName(), this.projectDirectoryPath);
+        FileProcessing.openProject(this.currentFilePath, this.projectDirectoryPath, this.infoPlist.getExecutableName());
+
+        // Run ghidra command to perform the decompilation
+        this.executableFilePath = this.projectDirectoryPath + File.separator + this.infoPlist.getExecutableName();
+
+        this.projectMacho = new Macho(executableFilePath, this.projectDirectoryPath, this.infoPlist.getExecutableName());
+        ghidraProject = new GhidraProject(this.infoPlist.getExecutableName(), this.executableFilePath);
+    
+        // Let the user select the architecture if it is a FAT binary
+        if (this.projectMacho.isFatBinary()) {
+            List<String> architectures = this.projectMacho.getArchitectureStrings();
+            String selectedArchitecture = selectArchitecture(architectures);
+            if (selectedArchitecture != null) {
+                this.projectMacho.processFatMacho(selectedArchitecture);
+            }
+        }
+        this.projectMacho.printArchitectures();
+        ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, this.projectMacho);
     }
 
     private String selectArchitecture(List<String> architectures) {

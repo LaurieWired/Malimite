@@ -7,8 +7,14 @@ from ghidra.program.model.listing import Listing
 import os
 import json
 
-outputPath = "C:\\Users\\Laurie\\Documents\\GitClones\\Dev_ipax\\test_samples\\temp"  #FIXME
-dataOutputFile = "C:\\Users\\Laurie\\Documents\\GitClones\\Dev_ipax\\test_samples\\temp\\ipax_macho_data.json"  #FIXME
+# Function to get command-line arguments in Ghidra headless mode
+def get_output_path():
+    args = getScriptArgs()
+    if len(args) > 0:
+        return args[0]
+    else:
+        print("No output path provided. Exiting script.")
+        return None
 
 def format_namespace_name(namespace_name):
     if namespace_name == "<global>":
@@ -16,42 +22,28 @@ def format_namespace_name(namespace_name):
     elif namespace_name == "<EXTERNAL>":
         return "External"
     return namespace_name
-
-def list_functions_and_namespaces(program):
+    
+def extract_class_function_data(program, outputPath):
     functionManager = program.getFunctionManager()
-    decompInterface = DecompInterface()
-    decompInterface.openProgram(program)
-    namespaceFunctionsMap = {}
-
-    # Ensure the output directory exists
-    if not os.path.exists(outputPath):
-        os.makedirs(outputPath)
+    namespaceFunctionData = {}
 
     # Collect functions for each namespace
     for function in functionManager.getFunctions(True):  # True for forward direction
         namespace = function.getParentNamespace()
         namespace_name = format_namespace_name(namespace.getName() if namespace else "<global>")
         
-        # Add function to the map
-        if namespace_name not in namespaceFunctionsMap:
-            namespaceFunctionsMap[namespace_name] = []
-        namespaceFunctionsMap[namespace_name].append(function)
+        if namespace_name not in namespaceFunctionData:
+            namespaceFunctionData[namespace_name] = []
 
-    # Write to files
-    for namespace, functions in namespaceFunctionsMap.items():
-        filePath = os.path.join(outputPath, "{}.cpp".format(namespace))
-        with open(filePath, 'w') as file:
-            file.write("class {} {{\n".format(namespace))
-            for function in functions:
-                decompiledFunction = decompInterface.decompileFunction(function, 0, ConsoleTaskMonitor())
-                decompiledCode = decompiledFunction.getDecompiledFunction().getC() if decompiledFunction.decompileCompleted() else "// Unable to decompile function"
-                file.write(decompiledCode)
-            file.write("}\n")  # Close the namespace
+        functionName = function.getName()
+        namespaceFunctionData[namespace_name].append(functionName)
 
-    # Close the decompiler interface
-    decompInterface.closeProgram()
+    # Write the class-function data to JSON
+    classDataFilePath = os.path.join(outputPath, "ipax_class_data.json")
+    with open(classDataFilePath, 'w') as file:
+        json.dump(namespaceFunctionData, file, indent=4)
 
-def list_defined_data_in_all_segments(program):
+def list_defined_data_in_all_segments(program, outputPath):
     memory = program.getMemory()
     listing = program.getListing()
     segments = memory.getBlocks()
@@ -94,9 +86,24 @@ def list_defined_data_in_all_segments(program):
         dataStructure[name] = segmentData
 
     # Write the JSON to the file
+    dataOutputFile = os.path.join(outputPath, "ipax_macho_data.json")
     with open(dataOutputFile, 'w') as file:
         json.dump(dataStructure, file, indent=4)
                 
-# Write the decompilation and the data to disk to be read in by ipax
-list_functions_and_namespaces(currentProgram)
-list_defined_data_in_all_segments(currentProgram)
+
+def main():
+    outputPath = get_output_path()
+    if outputPath is None:
+        return  # Exit if no output path is provided
+
+    # Ensure the output directory exists
+    if not os.path.exists(outputPath):
+        os.makedirs(outputPath)
+
+    # Write the class data and data segment data to disk to be read in by ipax
+    extract_class_function_data(currentProgram, outputPath)
+    list_defined_data_in_all_segments(currentProgram, outputPath)
+
+# Run the main function
+if __name__ == "__main__":
+    main()

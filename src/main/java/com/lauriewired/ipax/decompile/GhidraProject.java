@@ -11,9 +11,9 @@ public class GhidraProject {
     }
 
     public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho) {
-        try {
+        try {   
             //FIXME why is this not seeing my env vars
-            //FIXME do we have to write the ghidra scripts to the ghidra_scripts folder
+            //FIXME use "-scriptPath" for ghidra scripts location
             ProcessBuilder builder = new ProcessBuilder(
                 "C:\\Users\\Laurie\\Documents\\GitClones\\ghidra_10.4_PUBLIC\\support\\analyzeHeadless.bat",
                 projectDirectoryPath,
@@ -21,13 +21,11 @@ public class GhidraProject {
                 "-import",
                 executableFilePath,
                 "-postScript",
-                "ParseClasses.java" //TODO: also run name demangler if this is a swift binary
+                "Ghidra-DumpClassData.py",
+                projectDirectoryPath
             );
 
-            //FIXME need to let user decide which architecture to pull from the fat binary and pass the selection to ghidra
-
-            System.out.println("Running: " + builder.command().toString());
-            
+            System.out.println("Analyzing classes with Ghidra" + builder.command().toString());
             Process process = builder.start();
 
             // Read output and error streams
@@ -35,10 +33,35 @@ public class GhidraProject {
             FileProcessing.readStream(process.getErrorStream());
 
             process.waitFor();
-            System.out.println("Done with ghidra analysis");
+            System.out.println("Finished dumping class data");
+            
+            //FIXME move to another function and make this multithreaded and run in background
+            builder = new ProcessBuilder(
+                "C:\\Users\\Laurie\\Documents\\GitClones\\ghidra_10.4_PUBLIC\\support\\analyzeHeadless.bat",
+                projectDirectoryPath,
+                this.ghidraProjectName,
+                "-postScript",
+                "Ghidra-DumpMacho.py",
+                projectDirectoryPath,
+                "-process",
+                "-noanalysis"
+            );
+
+            System.out.println("Running Ghidra decompliation" + builder.command().toString());
+            process = builder.start();
+
+            // Read output and error streams
+            FileProcessing.readStream(process.getInputStream());
+            FileProcessing.readStream(process.getErrorStream());
+
+            process.waitFor();
+
+            System.out.println("Done with Ghidra analysis");
 
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
+
+    public void getPro
 }
