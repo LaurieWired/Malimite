@@ -25,6 +25,9 @@ def format_namespace_name(namespace_name):
     
 def extract_class_function_data(program, outputPath):
     functionManager = program.getFunctionManager()
+    classFunctionData = []
+
+    # Temporary dictionary to hold the namespace and functions
     namespaceFunctionData = {}
 
     # Collect functions for each namespace
@@ -38,10 +41,17 @@ def extract_class_function_data(program, outputPath):
         functionName = function.getName()
         namespaceFunctionData[namespace_name].append(functionName)
 
+    # Convert to desired format
+    for className, functions in namespaceFunctionData.items():
+        classFunctionData.append({
+            "ClassName": className,
+            "Functions": json.dumps(functions)
+        })
+
     # Write the class-function data to JSON
     classDataFilePath = os.path.join(outputPath, "ipax_class_data.json")
     with open(classDataFilePath, 'w') as file:
-        json.dump(namespaceFunctionData, file, indent=4)
+        json.dump(classFunctionData, file, indent=4)
 
 def list_defined_data_in_all_segments(program, outputPath):
     memory = program.getMemory()

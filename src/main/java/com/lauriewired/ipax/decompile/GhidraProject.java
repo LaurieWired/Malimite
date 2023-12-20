@@ -11,9 +11,10 @@ public class GhidraProject {
     }
 
     public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho) {
-        try {   
+        try {
             //FIXME why is this not seeing my env vars
             //FIXME use "-scriptPath" for ghidra scripts location
+            //TODO idea: loading bar saying "decompiled 50/103 classes" during decompilation, running in the background
             ProcessBuilder builder = new ProcessBuilder(
                 "C:\\Users\\Laurie\\Documents\\GitClones\\ghidra_10.4_PUBLIC\\support\\analyzeHeadless.bat",
                 projectDirectoryPath,
@@ -47,7 +48,7 @@ public class GhidraProject {
                 "-noanalysis"
             );
 
-            System.out.println("Running Ghidra decompliation" + builder.command().toString());
+            System.out.println("Running Ghidra decompilation" + builder.command().toString());
             process = builder.start();
 
             // Read output and error streams
@@ -62,6 +63,4 @@ public class GhidraProject {
             e.printStackTrace();
         }
     }
-
-    public void getPro
 }

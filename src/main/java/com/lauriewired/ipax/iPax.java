@@ -32,6 +32,7 @@ public class iPax extends JFrame {
     private GhidraProject ghidraProject;
     private String executableFilePath; // Path to the main macho file for this app
     private Macho projectMacho;
+    private SQLiteDBHandler dbHandler;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new iPax().setVisible(true));
@@ -90,7 +91,7 @@ public class iPax extends JFrame {
                         treeModel.reload();
                         fileEntriesMap.clear();
                         fileContentArea.setText("");
-                        unzipAndLoadToTree(file, filesRootNode);
+                        unzipAndLoadToTree(file, filesRootNode, classesRootNode);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -103,7 +104,7 @@ public class iPax extends JFrame {
         setLocationRelativeTo(null);
     }
 
-    private void unzipAndLoadToTree(File fileToUnzip, DefaultMutableTreeNode filesRootNode) {
+    private void unzipAndLoadToTree(File fileToUnzip, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
         System.out.println("Analyzing " + fileToUnzip);
         this.currentFilePath = fileToUnzip.toString();
     
@@ -126,6 +127,7 @@ public class iPax extends JFrame {
 
             initializeGhidraProject();
             populateDatabase();
+            populateClassesNode(classesRootNode);
     
             treeModel.reload();
             NodeOperations.collapseAllTreeNodes(this.fileTree);
@@ -133,10 +135,41 @@ public class iPax extends JFrame {
             e.printStackTrace();
         }
     }
+    
+    private void populateClassesNode(DefaultMutableTreeNode classesRootNode) {
+        classesRootNode.removeAllChildren();
+        Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
+
+        for (Map.Entry<String, List<String>> entry : classesAndFunctions.entrySet()) {
+            String className = entry.getKey();
+            List<String> functions = entry.getValue();
+
+            DefaultMutableTreeNode classNode = new DefaultMutableTreeNode(className);
+            for (String function : functions) {
+                classNode.add(new DefaultMutableTreeNode(function));
+            }
+            classesRootNode.add(classNode);
+        }
+    }
 
     private void populateDatabase() {
-        SQLiteDBHandler dbHandler = new SQLiteDBHandler(this.projectMacho.getMachoExecutableName() + "_ipax.db");
-        dbHandler.populateFromProjectDirectory();
+        System.out.println("Initializing database for iPax data");
+
+        System.out.println("projectDirectoryPath: " + projectDirectoryPath);
+        System.out.println("projectMacho.getMachoExecutableName(): " + projectMacho.getMachoExecutableName());
+
+        this.dbHandler = new SQLiteDBHandler(this.projectDirectoryPath + File.separator, this.projectMacho.getMachoExecutableName() + "_ipax.db");
+        dbHandler.populateInitialClassData(this.projectDirectoryPath + File.separator + "ipax_class_data.json");
+
+        System.out.println("Finished initializing database");
+
+        System.out.println("Adding function data to database");
+
+        dbHandler.populateFunctionData(this.projectDirectoryPath, this.projectDirectoryPath + File.separator + "functions_info.json");
+
+        System.out.println("Finished adding function data to database");
+
+        //dbHandler.readClasses();
     }
 
     private void initializeGhidraProject() {
@@ -160,7 +193,7 @@ public class iPax extends JFrame {
             }
         }
         this.projectMacho.printArchitectures();
-        ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, this.projectMacho);
+        ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, this.projectMacho); //FIXME uncomment
     }
 
     private String selectArchitecture(List<String> architectures) {

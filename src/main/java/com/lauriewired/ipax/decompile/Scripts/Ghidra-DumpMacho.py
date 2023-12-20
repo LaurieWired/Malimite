@@ -23,12 +23,16 @@ def format_namespace_name(namespace_name):
         return "External"
     return namespace_name
 
-# TODO: Slow for very large files. May want to rethink this design
+# Helper function to count lines in a string
+def count_lines(s):
+    return s.count('\n') + 1
+
 def list_functions_and_namespaces(program, outputPath):
     functionManager = program.getFunctionManager()
     decompInterface = DecompInterface()
     decompInterface.openProgram(program)
     namespaceFunctionsMap = {}
+    jsonOutput = []
 
     # Collect functions for each namespace
     for function in functionManager.getFunctions(True):  # True for forward direction
@@ -40,20 +44,40 @@ def list_functions_and_namespaces(program, outputPath):
             namespaceFunctionsMap[namespace_name] = []
         namespaceFunctionsMap[namespace_name].append(function)
 
-    # Write to files
+    # Initialize a counter for file naming
+    fileCounter = 1
+
+    # Write to files with names based on the counter
     for namespace, functions in namespaceFunctionsMap.items():
-        filePath = os.path.join(outputPath, "{}.c".format(namespace))
+        filePath = os.path.join(outputPath, "ipax_class_{}.c".format(fileCounter))
+
         with open(filePath, 'w') as file:
             file.write("class {} {{\n".format(namespace))
+
             for function in functions:
                 decompiledFunction = decompInterface.decompileFunction(function, 0, ConsoleTaskMonitor())
-                decompiledCode = decompiledFunction.getDecompiledFunction().getC() if decompiledFunction.decompileCompleted() else "// Unable to decompile function"
-                file.write(decompiledCode)
+                if decompiledFunction.decompileCompleted():
+                    decompiledCode = decompiledFunction.getDecompiledFunction().getC()
+                    file.write(decompiledCode)
+                    jsonOutput.append({
+                        "FunctionName": function.getName(),
+                        "ClassName": namespace,
+                        "ClassFileName": os.path.basename(filePath),
+                    })
+                else:
+                    file.write("// Unable to decompile function\n")
             file.write("}\n")  # Close the namespace
+
+        # Increment the counter after writing each file
+        fileCounter += 1
+
+    # Write JSON output
+    jsonFilePath = os.path.join(outputPath, "functions_info.json")
+    with open(jsonFilePath, 'w') as jsonFile:
+        json.dump(jsonOutput, jsonFile, indent=4)
 
     # Close the decompiler interface
     decompInterface.closeProgram()
-               
 
 def main():
     outputPath = get_output_path()
