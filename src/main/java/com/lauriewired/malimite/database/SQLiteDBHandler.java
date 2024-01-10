@@ -1,4 +1,4 @@
-package com.lauriewired.ipax.database;
+package com.lauriewired.malimite.database;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;

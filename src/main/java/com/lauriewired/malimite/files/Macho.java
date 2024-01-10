@@ -1,4 +1,4 @@
-package com.lauriewired.ipax.files;
+package com.lauriewired.malimite.files;
 
 import java.io.File;
 import java.io.FileOutputStream;

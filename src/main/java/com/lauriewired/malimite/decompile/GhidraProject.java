@@ -1,7 +1,7 @@
-package com.lauriewired.ipax.decompile;
+package com.lauriewired.malimite.decompile;
 
-import com.lauriewired.ipax.utils.FileProcessing;
-import com.lauriewired.ipax.files.Macho;
+import com.lauriewired.malimite.utils.FileProcessing;
+import com.lauriewired.malimite.files.Macho;
 
 public class GhidraProject {
     private String ghidraProjectName;

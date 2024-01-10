@@ -1,0 +1,41 @@
+.root {
+    -fx-font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    -fx-font-size: 16px;
+}
+
+.button {
+    -fx-padding: 8px 15px;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-border-width: 2px;
+}
+
+.label {
+    -fx-font-weight: bold;
+}
+
+.text-field, .combo-box {
+    -fx-padding: 4px 8px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+}
+
+.stack-pane {
+    -fx-padding: 10px;
+    -fx-alignment: center;
+}
+
+.vbox {
+    -fx-spacing: 10px;
+    -fx-alignment: center;
+}
+
+.tree-cell > .tree-disclosure-node {
+    -fx-background-color: transparent;
+    -fx-shape: "M0,0 L1,0 L0.5,1 z"; /* Triangle shape */
+    -fx-padding: 1; /* Adjust for size */
+}
+
+.tree-cell:expanded > .tree-disclosure-node {
+    -fx-rotate: 90; /* Rotate arrow for expanded state */
+}

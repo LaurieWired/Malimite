@@ -1,0 +1,102 @@
+/* Base color palette */
+.root {
+    -fx-base: #2b2d2e; /* Dark gray, primary background */
+    -fx-text-base-color: #d4d4d4; /* White-ish, primary text color */
+    -fx-accent: #4fa8f7; /* Light blue, accent color */
+    -fx-focus-color: #305f72; /* Darker shade of light blue for focus */
+}
+
+/* Button styling */
+.button {
+    -fx-background-color: -fx-accent, -fx-base;
+    -fx-background-insets: 0, 1;
+    -fx-text-fill: -fx-text-base-color;
+    -fx-font-weight: bold;
+}
+
+.button:hover {
+    -fx-background-color: derive(-fx-accent, 20%);
+}
+
+.button:pressed {
+    -fx-background-color: derive(-fx-accent, -20%);
+}
+
+/* Label styling */
+.label {
+    -fx-text-fill: -fx-text-base-color;
+}
+
+/* Text Field styling */
+.text-field {
+    -fx-background-color: -fx-base;
+    -fx-text-fill: -fx-text-base-color;
+    -fx-prompt-text-fill: derive(-fx-text-base-color, 40%);
+    -fx-highlight-fill: -fx-accent;
+    -fx-highlight-text-fill: -fx-base;
+}
+
+.text-field:focused {
+    -fx-background-color: derive(-fx-base, 50%);
+}
+
+StackPane {
+    -fx-background-color: derive(-fx-base, -20%);
+    -fx-padding: 10px;
+    -fx-background-radius: 5px;
+}
+
+/* Container elements like panels, scenes */
+.pane, .anchor-pane, .vbox, .hbox {
+    -fx-background-color: derive(-fx-base, 50%);
+}
+
+/* Scroll Pane */
+.scroll-pane {
+    -fx-background-color: -fx-base;
+    -fx-border-color: transparent;
+}
+
+/* Tables */
+.table-view {
+    -fx-base: derive(-fx-base, 50%); /* Darken the base color */
+    -fx-control-inner-background: -fx-base;
+    -fx-background-color: -fx-base;
+    -fx-table-cell-border-color: transparent;
+    -fx-table-header-border-color: transparent;
+    -fx-padding: 0.5em;
+}
+
+.table-view .column-header {
+    -fx-background-color: transparent;
+    -fx-text-fill: -fx-text-base-color;
+    -fx-font-weight: bold;
+}
+
+.table-row-cell:filled:selected, .table-row-cell:filled:selected .text {
+    -fx-background-color: -fx-accent;
+    -fx-text-fill: -fx-base;
+}
+
+/* Tabs */
+.tab-pane {
+    -fx-tab-min-height: 30px;
+    -fx-tab-max-height: 30px;
+}
+
+.tab {
+    -fx-background-color: derive(-fx-base, -20%);
+    -fx-text-fill: -fx-text-base-color;
+}
+
+.tab:selected {
+    -fx-background-color: -fx-accent;
+    -fx-text-fill: -fx-base;
+}
+
+/* Tooltips */
+.tooltip {
+    -fx-background-color: derive(-fx-base, -20%); /* Darken the base color */
+    -fx-text-fill: -fx-text-base-color;
+    -fx-font-size: 0.9em;
+}

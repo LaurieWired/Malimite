@@ -1,4 +1,4 @@
-package com.lauriewired.ipax.utils;
+package com.lauriewired.malimite.utils;
 
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;

@@ -1,4 +1,4 @@
-package com.lauriewired.ipax.parse;
+package com.lauriewired.malimite.parse;
 
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;

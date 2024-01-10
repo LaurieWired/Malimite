@@ -1,11 +1,11 @@
-package com.lauriewired.ipax.files;
+package com.lauriewired.malimite.files;
 
 import java.util.Map;
 import javax.swing.tree.DefaultMutableTreeNode;
 
-import com.lauriewired.ipax.utils.NodeOperations;
-import com.lauriewired.ipax.utils.PlistUtils;
-import com.lauriewired.ipax.utils.FileProcessing;
+import com.lauriewired.malimite.utils.NodeOperations;
+import com.lauriewired.malimite.utils.PlistUtils;
+import com.lauriewired.malimite.utils.FileProcessing;
 
 import com.dd.plist.NSObject;
 import com.dd.plist.PropertyListParser;
