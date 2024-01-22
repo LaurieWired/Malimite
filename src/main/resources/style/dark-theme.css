@@ -23,10 +23,14 @@
 }
 
 .code-area {
-    -fx-background-color: #9b9c9d;
+    -fx-background-color: -fx-base;
     -fx-padding: 10px;
     -fx-text-fill: -fx-text-base-color;
     -fx-control-inner-background: black;
+}
+
+.terminal_label {
+    -fx-background-color: -fx-base;
 }
 
 .line-number {
@@ -38,11 +42,6 @@
 
 .decompiled-code-pane {
     -fx-background-color: #9b9c9d;
-}
-
-.console {
-    -fx-control-inner-background: black;
-    -fx-text-fill: white;
 }
 
 /* Label styling */
