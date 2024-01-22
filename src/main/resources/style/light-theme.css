@@ -22,6 +22,22 @@
     -fx-background-color: derive(-fx-accent, -20%);
 }
 
+/* CodeArea styling for light theme */
+.code-area {
+    -fx-background-color: white;
+    -fx-padding: 10px;
+    -fx-control-inner-background: #2b2d2e; /* Dark gray background to match the theme */
+}
+
+.line-number {
+    -fx-padding: 0 15px 0 0;
+}
+
+.console {
+    -fx-control-inner-background: -fx-base;
+    -fx-text-fill: black;
+}
+
 /* Label styling */
 .label {
     -fx-text-fill: -fx-text-base-color;

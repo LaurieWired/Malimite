@@ -13,10 +13,9 @@ import com.dd.plist.PropertyListParser;
 public class InfoPlist {
     private String infoPlistBundleExecutable; // CFBundleExecutable from Info.plist
 
-    public InfoPlist(DefaultMutableTreeNode infoPlistNode, String filePath, Map<String, String> fileEntriesMap) {
+    public InfoPlist(String zipFilePath, String plistPath) {
         try {
-            String infoPlistPath = NodeOperations.buildFullPathFromNode(infoPlistNode);
-            byte[] plistData = FileProcessing.readContentFromZip(filePath, fileEntriesMap.get(infoPlistPath));
+            byte[] plistData = FileProcessing.readContentFromZip(zipFilePath, plistPath);
     
             if (PlistUtils.isBinaryPlist(plistData)) {
                 // Handle binary plist
@@ -28,6 +27,8 @@ public class InfoPlist {
                 NSObject plist = PropertyListParser.parse(plistContent.getBytes());
                 infoPlistBundleExecutable = PlistUtils.extractCFBundleExecutable(plist);
             }
+
+            System.out.println(this.infoPlistBundleExecutable);
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -63,12 +63,15 @@ public class Macho {
     }
 
     private void extractSlice(String inputFilePath, String outputFileName, long offset, long size) throws IOException {
+        System.out.println("Inside extractSlice");
+        
         // Construct the full path for the output file
         String outputPath = outputDirectoryPath + File.separator + outputFileName;
 
         try (RandomAccessFile inputFile = new RandomAccessFile(inputFilePath, "r");
              FileOutputStream outputFile = new FileOutputStream(outputPath)) {
 
+            System.out.println(outputPath);
             inputFile.seek(offset);
             byte[] buffer = new byte[8192];
             long remaining = size;

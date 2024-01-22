@@ -9,27 +9,39 @@ import javafx.scene.control.TreeView;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.Separator;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.text.TextFlow;
 import javafx.stage.Stage;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import org.fxmisc.richtext.CodeArea;
+
 import com.lauriewired.malimite.config.AppConfig;
+import com.lauriewired.malimite.project.Project;
+import com.lauriewired.malimite.utils.PlistUtils;
 import com.lauriewired.malimite.utils.FileProcessing;
 
 public class ProjectWindow {
-    private ConfigMenu configMenu;
+    private static Map<TreeItem<String>, String> filePathMap = new HashMap<>(); // Paths for nodes in the tree mapepd to the actual file path
+    private static String infoPlistPath = "";
 
     public static void show(Stage stage, File file, AppConfig appConfig) {
         VBox root = new VBox();
-        setupWindow(stage, file, appConfig, root);
+        Project malimiteProject = new Project();
+        
+        setupWindow(stage, file, appConfig, root, malimiteProject);
     
         // Set the new root on the existing scene
         if (stage.getScene() == null) {
@@ -45,14 +57,13 @@ public class ProjectWindow {
         stage.show();
     }
 
-    public static void setupWindow(Stage stage, File file, AppConfig appConfig, VBox root) {
+    public static void setupWindow(Stage stage, File file, AppConfig appConfig, VBox root, Project malimiteProject) {
         // Setup top menu bar
         Button settingsButton = new Button("Settings");
         settingsButton.setOnAction(e -> ConfigMenu.showSettingsDialog(stage, stage.getScene(), appConfig));
         Button helpButton = new Button("Help");
 
         HBox menuContainer = new HBox(10);
-        menuContainer.getChildren().addAll(settingsButton, helpButton);
         menuContainer.setPadding(new Insets(10, 10, 10, 10));
         Separator menuSeparator = new Separator();
         menuSeparator.setPrefWidth(Double.MAX_VALUE);
@@ -70,30 +81,39 @@ public class ProjectWindow {
         // Temp add item to classes node
         createTreeItem(classesRoot, "TestClass");
 
-        populateLefthandTree(resourcesRoot, file);
-
         TreeView<String> lefthandView = new TreeView<>(treeRoot);
         treeRoot.getChildren().add(classesRoot);
         treeRoot.getChildren().add(resourcesRoot);
 
         // Placeholder for decompiled code (right pane)
         StackPane decompiledCodePane = new StackPane();
-        Label decompiledCodeLabel = new Label("Decompiled code will be displayed here.");
-        decompiledCodePane.getChildren().add(decompiledCodeLabel);
+        decompiledCodePane.getStyleClass().add("decompiled-code-pane");
+
+        CodeArea codeArea = new CodeArea();
+        codeArea.setParagraphGraphicFactory(paragraphIndex -> {
+            Label lineNum = new Label(Integer.toString(paragraphIndex + 1));
+            lineNum.getStyleClass().add("line-number"); // Add a style class to the line number label
+            TextFlow flow = new TextFlow(lineNum);
+            return flow;
+        });
+        codeArea.setEditable(false);
+        codeArea.getStyleClass().add("code-area");
+        System.out.println(codeArea.getStyleClass());
+
+        decompiledCodePane.getChildren().add(codeArea);
 
         // Add event listener to the TreeView for item selection
         lefthandView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            System.out.println("Node selected: " + (newValue != null ? newValue.getValue() : "null")); // Debugging log
+        
             if (newValue != null && newValue.isLeaf()) {
-                // Assuming the full path of the file is stored as the value of the TreeItem
-                File selectedFile = new File(file.getParent(), newValue.getValue());
-                if (selectedFile.exists() && selectedFile.isFile()) {
-                    try {
-                        // Read the contents of the file (this is a basic example, adjust as needed)
-                        String content = new String(Files.readAllBytes(selectedFile.toPath()));
-                        decompiledCodeLabel.setText(content); // Display the content in the label
-                    } catch (IOException e) {
-                        decompiledCodeLabel.setText("Error reading file: " + e.getMessage());
+                TreeItem<String> parent = newValue.getParent();
+                while (parent != null) {
+                    if (parent == resourcesRoot) {
+                        displaySelectedFileContent(newValue, codeArea, file.getAbsolutePath());
+                        return; // Exit the loop and listener once the correct item is found
                     }
+                    parent = parent.getParent();
                 }
             }
         });
@@ -104,22 +124,90 @@ public class ProjectWindow {
         // Set SplitPane to take as much space as possible
         VBox.setVgrow(splitPane, Priority.ALWAYS);
 
-        // Buttons under the SplitPane
         Button decompilerButton = new Button("Decompiler");
         Button stringsButton = new Button("Strings");
-        HBox bottomButtons = new HBox(10, decompilerButton, stringsButton);
-        bottomButtons.setPadding(new Insets(10, 10, 10, 10));
-        bottomButtons.setAlignment(Pos.CENTER);
+        Button scriptingButton = new Button("Scripting");
+        HBox rightButtons = new HBox(10, scriptingButton, decompilerButton, stringsButton);
+        rightButtons.setAlignment(Pos.CENTER_RIGHT);
+        menuContainer.getChildren().addAll(settingsButton, helpButton, rightButtons);
+
+        TextArea console = new TextArea();
+        console.setEditable(false);
+        console.getStyleClass().add("console");
+
+        // Redirect System.out to the TextArea
+        PrintStream ps = new PrintStream(new OutputStream() {
+            @Override
+            public void write(int b) {
+                javafx.application.Platform.runLater(() -> {
+                    console.appendText(String.valueOf((char) b));
+                });
+            }
+        });
+        System.setOut(ps);
+        System.setErr(ps);
+
+        populateLefthandTree(resourcesRoot, file);
+
+        // Now initialize the actual project if we have a valid bundle file (has an Info.plist)
+        if (!infoPlistPath.isEmpty()) {
+            System.out.println("Opening Malamite project");
+            malimiteProject.processAppBundle(file.getAbsolutePath(), infoPlistPath);
+        } else {
+            System.out.println("No valid Info.plist found");
+        }
+
+        // Set a fixed height for the console or make it grow as needed
+        console.setPrefHeight(150);
 
         // Add all components to the root VBox
-        root.getChildren().addAll(menuContainer, menuSeparator, splitPane, bottomButtons);
+        root.getChildren().addAll(menuContainer, menuSeparator, splitPane, console);
+    }
+
+    private static void displaySelectedFileContent(TreeItem<String> newValue, CodeArea codeArea, String currentFilePath) {
+        System.out.println("newValue: " + newValue.getValue());
+        String zipEntryPath = filePathMap.get(newValue);
+
+        System.out.println("zipEntryPath: " + zipEntryPath);
+
+        if (currentFilePath != null) {
+            try {
+                byte[] contentBytes = FileProcessing.readContentFromZip(currentFilePath, zipEntryPath);
+                String contentText;
+
+                // Decode if it's a binary plist. Otherwise, just print the text
+                if (zipEntryPath.endsWith("plist") && PlistUtils.isBinaryPlist(contentBytes)) {
+                    System.out.println("Handling binary property list");
+                    contentText = PlistUtils.decodeBinaryPropertyList(contentBytes);
+                    //this.fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JSON);
+                } else {
+                    contentText = new String(contentBytes);
+                    //this.fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
+                }
+        
+                codeArea.replaceText(contentText);
+                codeArea.moveTo(0);
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
     }
 
     private static void populateLefthandTree(TreeItem<String> root, File zipFile) {
         try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(zipFile))) {
             ZipEntry entry = zipIn.getNextEntry();
             while (entry != null) {
-                createTreeItem(root, entry.getName());
+                String entryFullPath = entry.getName(); // Full path of the file in the zip
+                TreeItem<String> createdItem = createTreeItem(root, entryFullPath);
+    
+                filePathMap.put(createdItem, entryFullPath); // Map TreeItem path to full zip file path
+
+                // Find our Info.plist to get the main executable
+                if (entryFullPath.endsWith("Info.plist")) {
+                    infoPlistPath = filePathMap.get(createdItem);
+                    System.out.println("Found Info.plist at " + infoPlistPath);
+                }
+    
                 zipIn.closeEntry();
                 entry = zipIn.getNextEntry();
             }
@@ -127,14 +215,13 @@ public class ProjectWindow {
             e.printStackTrace();
         }
     }
+    
 
-    private static void createTreeItem(TreeItem<String> root, String entryName) {
+    private static TreeItem<String> createTreeItem(TreeItem<String> root, String entryName) {
         String[] parts = entryName.split("/");
         TreeItem<String> current = root;
     
-        for (int i = 0; i < parts.length; i++) {
-            String part = parts[i];
-    
+        for (String part : parts) {
             // Check if the part is already a child of the current node
             TreeItem<String> foundChild = current.getChildren().stream()
                 .filter(child -> child.getValue().equals(part))
@@ -151,5 +238,8 @@ public class ProjectWindow {
                 current = foundChild;
             }
         }
+        
+        return current; // Return the last created or found TreeItem
     }
+    
 }

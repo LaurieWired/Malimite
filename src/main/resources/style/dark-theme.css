@@ -22,6 +22,29 @@
     -fx-background-color: derive(-fx-accent, -20%);
 }
 
+.code-area {
+    -fx-background-color: #9b9c9d;
+    -fx-padding: 10px;
+    -fx-text-fill: -fx-text-base-color;
+    -fx-control-inner-background: black;
+}
+
+.line-number {
+    -fx-text-fill: black;
+    -fx-background-color: #9b9c9d;
+    -fx-font-weight: bold;
+    -fx-padding: 0 15px 0 0;
+}
+
+.decompiled-code-pane {
+    -fx-background-color: #9b9c9d;
+}
+
+.console {
+    -fx-control-inner-background: black;
+    -fx-text-fill: white;
+}
+
 /* Label styling */
 .label {
     -fx-text-fill: -fx-text-base-color;
@@ -59,7 +82,7 @@ StackPane {
 
 /* Tables */
 .table-view {
-    -fx-base: derive(-fx-base, 50%); /* Darken the base color */
+    -fx-base: derive(-fx-base, 80%);
     -fx-control-inner-background: -fx-base;
     -fx-background-color: -fx-base;
     -fx-table-cell-border-color: transparent;
@@ -96,7 +119,7 @@ StackPane {
 
 /* Tooltips */
 .tooltip {
-    -fx-background-color: derive(-fx-base, -20%); /* Darken the base color */
+    -fx-background-color: derive(-fx-base, -20%);
     -fx-text-fill: -fx-text-base-color;
     -fx-font-size: 0.9em;
 }

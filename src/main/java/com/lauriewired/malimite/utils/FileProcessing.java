@@ -27,12 +27,15 @@ public class FileProcessing {
         }).start();
     }
 
+    /*
+     * Extracts a macho binary from an IPA file to the target directory
+     */
     public static void unzipExecutable(String zipFilePath, String executableName, String outputFilePath) throws IOException {
         try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(zipFilePath))) {
             ZipEntry entry = zipIn.getNextEntry();
             while (entry != null) {
-                if (!entry.isDirectory() && entry.getName().endsWith(executableName)) {
-                    extractFile(zipIn, outputFilePath);
+                if (!entry.isDirectory() && entry.getName().endsWith(executableName)) { //TODO add file separator?
+                    extractFile(zipIn, outputFilePath + File.separator + executableName);
                     break;
                 }
                 zipIn.closeEntry();
@@ -73,54 +76,38 @@ public class FileProcessing {
     }
 
     /*
-     * Extracts a macho binary from an IPA file to a new project directory
-     * Returns the name of the new project directory
+     * Takes in a full path to a file name and returns the path without the file name at the end
      */
-    public static String extractMachoToProjectDirectory(String filePath, String executableName, String projectDirectoryPath) {
-        if (filePath == null || filePath.isEmpty() || 
-            executableName == null || executableName.isEmpty()) {
-            System.out.println("Failed to extract executable");
-            return "";
+    public static String removeFileNameFromPath(String path) {
+        File file = new File(path);
+
+        // Check if the path actually has a parent directory
+        if (file.getParent() != null) {
+            // Return the parent directory's path
+            return file.getParent() + File.separator;
+        } else {
+            // Return the original path if it's already a directory or has no parent
+            return path;
         }
-
-        System.out.println(filePath + " " + executableName);
-
-        // Extract the base name of the .ipa file
-        File ipaFile = new File(filePath);
-        String baseName = ipaFile.getName().replaceFirst("[.][^.]+$", "");
-        return ipaFile.getParent() + File.separator + baseName + "_ipax";
     }
     
     /*
-     * Creates a new ipax project if it doesn't exist
-     * Otherwise, reopens an existing project
+     * Creates a new Malamite project if it doesn't exist and returns false
+     * Otherwise, reopens an existing project and returns true
      */
-    public static void openProject(String filePath, String projectDirectoryPath, String executableName) {
+    public static boolean openProjectDirectory(String projectDirectoryPath) {
         // Create ipax project directory
         File projectDirectory = new File(projectDirectoryPath);
-        if (!projectDirectory.exists()) {
+        if (projectDirectory.exists()) {
+            //TODO: the project directory already exists so we need to reopen the project
+            return true;
+        } else {
             if (projectDirectory.mkdir()) {
                 System.out.println("Created project directory: " + projectDirectoryPath);
             } else {
                 System.out.println("Failed to create project directory: " + projectDirectoryPath);
-                return;
             }
-
-            // Unzip the executable into the new project directory
-            // Unfortunately we have to extract it for ghidra to process it in headless mode
-            String outputFilePath = projectDirectoryPath + File.separator + executableName;
-            try {
-                unzipExecutable(filePath, executableName, outputFilePath);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        } else {
-            //TODO: add handling for reopening an existing ipax project
-            //System.out.println("Project '" + this.ghidraProjectName + "' already exists.");
-
-            //will need to add project name + classes + xrefs + user comments
-            //reopening will populate this into ipax
-            //maybe should add resource node structure here as an optimization
+            return false;
         }
     }
 }
