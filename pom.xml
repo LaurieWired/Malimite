@@ -4,11 +4,13 @@
     <groupId>com.lauriewired.malimite</groupId>
     <artifactId>malimite</artifactId>
     <version>1.0</version>
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
     </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.openjfx</groupId>
@@ -56,7 +58,27 @@
             <artifactId>rsyntaxtextarea</artifactId>
             <version>3.3.4</version>
         </dependency>
+        <dependency>
+            <groupId>org.fxmisc.richtext</groupId>
+            <artifactId>richtextfx</artifactId>
+            <version>0.11.2</version>
+        </dependency>
     </dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.openjfx</groupId>
+				<artifactId>javafx-maven-plugin</artifactId>
+				<version>0.0.8</version>
+				<configuration>
+					<mainClass>com.lauriewired.malimite.Malimite</mainClass>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+<!--
     <build>
         <plugins>
             <plugin>
@@ -73,8 +95,6 @@
                 <version>0.0.6</version>
                 <executions>
                     <execution>
-                        <!-- Default configuration for running -->
-                        <!-- Usage: mvn clean javafx:run -->
                         <id>default-cli</id>
                         <configuration>
                             <mainClass>com.lauriewired.malimite.Malimite</mainClass>
@@ -84,4 +104,5 @@
             </plugin>
         </plugins>
     </build>
+-->
 </project>
