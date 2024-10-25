@@ -16,7 +16,7 @@ public class GhidraProject {
             //FIXME use "-scriptPath" for ghidra scripts location
             //TODO idea: loading bar saying "decompiled 50/103 classes" during decompilation, running in the background
             ProcessBuilder builder = new ProcessBuilder(
-                "C:\\Users\\Laurie\\Documents\\GitClones\\ghidra_10.4_PUBLIC\\support\\analyzeHeadless.bat",
+                "/Users/laurie/Documents/ghidra_11.2_PUBLIC/support/analyzeHeadless.bat",
                 projectDirectoryPath,
                 this.ghidraProjectName,
                 "-import",
@@ -38,7 +38,7 @@ public class GhidraProject {
             
             //FIXME move to another function and make this multithreaded and run in background
             builder = new ProcessBuilder(
-                "C:\\Users\\Laurie\\Documents\\GitClones\\ghidra_10.4_PUBLIC\\support\\analyzeHeadless.bat",
+                "/Users/laurie/Documents/ghidra_11.2_PUBLIC/support/analyzeHeadless.bat",
                 projectDirectoryPath,
                 this.ghidraProjectName,
                 "-postScript",

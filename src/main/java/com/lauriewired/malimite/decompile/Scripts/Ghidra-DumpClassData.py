@@ -49,7 +49,7 @@ def extract_class_function_data(program, outputPath):
         })
 
     # Write the class-function data to JSON
-    classDataFilePath = os.path.join(outputPath, "ipax_class_data.json")
+    classDataFilePath = os.path.join(outputPath, "malimite_class_data.json")
     with open(classDataFilePath, 'w') as file:
         json.dump(classFunctionData, file, indent=4)
 
@@ -96,7 +96,7 @@ def list_defined_data_in_all_segments(program, outputPath):
         dataStructure[name] = segmentData
 
     # Write the JSON to the file
-    dataOutputFile = os.path.join(outputPath, "ipax_macho_data.json")
+    dataOutputFile = os.path.join(outputPath, "malimite_macho_data.json")
     with open(dataOutputFile, 'w') as file:
         json.dump(dataStructure, file, indent=4)
                 
@@ -110,7 +110,7 @@ def main():
     if not os.path.exists(outputPath):
         os.makedirs(outputPath)
 
-    # Write the class data and data segment data to disk to be read in by ipax
+    # Write the class data and data segment data to disk to be read in by malimite
     extract_class_function_data(currentProgram, outputPath)
     list_defined_data_in_all_segments(currentProgram, outputPath)
 

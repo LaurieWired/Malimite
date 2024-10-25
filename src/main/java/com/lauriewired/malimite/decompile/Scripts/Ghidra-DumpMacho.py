@@ -49,7 +49,7 @@ def list_functions_and_namespaces(program, outputPath):
 
     # Write to files with names based on the counter
     for namespace, functions in namespaceFunctionsMap.items():
-        filePath = os.path.join(outputPath, "ipax_class_{}.c".format(fileCounter))
+        filePath = os.path.join(outputPath, "malimite_class_{}.c".format(fileCounter))
 
         with open(filePath, 'w') as file:
             file.write("class {} {{\n".format(namespace))
@@ -88,7 +88,7 @@ def main():
     if not os.path.exists(outputPath):
         os.makedirs(outputPath)
 
-    # Write the decompilation to disk to be read in by ipax
+    # Write the decompilation to disk to be read in by malimite
     list_functions_and_namespaces(currentProgram, outputPath)
 
 # Run the main function
