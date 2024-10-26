@@ -42,6 +42,10 @@ import com.lauriewired.malimite.files.InfoPlist;
 import com.lauriewired.malimite.files.Macho;
 import com.lauriewired.malimite.decompile.GhidraProject;
 import com.lauriewired.malimite.database.SQLiteDBHandler;
+import com.lauriewired.malimite.configuration.Config;
+
+import java.nio.file.Paths;
+import java.nio.file.Files;
 
 public class Malimite extends JFrame {
 
@@ -59,6 +63,7 @@ public class Malimite extends JFrame {
     private String executableFilePath; // Path to the main macho file for this app
     private Macho projectMacho;
     private SQLiteDBHandler dbHandler;
+    private Config config;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new Malimite().setVisible(true));
@@ -66,6 +71,10 @@ public class Malimite extends JFrame {
 
     public Malimite() {
         super("Malimite");
+
+        // Initialize config
+        this.config = new Config();
+        checkAndSetGhidraPath();
 
         fileNameLabel = new JLabel("No file selected");
         fileNameLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
@@ -207,7 +216,7 @@ public class Malimite extends JFrame {
         this.executableFilePath = this.projectDirectoryPath + File.separator + this.infoPlist.getExecutableName();
 
         this.projectMacho = new Macho(executableFilePath, this.projectDirectoryPath, this.infoPlist.getExecutableName());
-        ghidraProject = new GhidraProject(this.infoPlist.getExecutableName(), this.executableFilePath);
+        ghidraProject = new GhidraProject(this.infoPlist.getExecutableName(), this.executableFilePath, this.config);
     
         // Let the user select the architecture if it is a Universal binary
         if (this.projectMacho.isUniversalBinary()) {
@@ -291,5 +300,48 @@ public class Malimite extends JFrame {
                 ex.printStackTrace();
             }
         }
+    }
+
+    private void checkAndSetGhidraPath() {
+        String ghidraPath = config.getGhidraPath();
+
+        if (ghidraPath == null || ghidraPath.isEmpty()) {
+            // Check if Ghidra is in the app directory
+            String appDir = System.getProperty("user.dir");
+            String potentialGhidraPath = Paths.get(appDir, "ghidra").toString();
+
+            if (isValidGhidraPath(potentialGhidraPath)) {
+                ghidraPath = potentialGhidraPath;
+                System.setProperty("GHIDRA_PATH", ghidraPath);
+                config.setGhidraPath(ghidraPath);
+                System.out.println("Ghidra found in app directory. Set GHIDRA_PATH to: " + ghidraPath);
+            } else {
+                // Prompt user for Ghidra path
+                ghidraPath = promptForGhidraPath();
+            }
+        }
+
+        if (ghidraPath == null || ghidraPath.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                "Ghidra path is required. The application will now exit.",
+                "Error",
+                JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+        }
+
+        config.setGhidraPath(ghidraPath);
+    }
+
+    private boolean isValidGhidraPath(String path) {
+        return Files.exists(Paths.get(path, "support", "analyzeHeadless"))
+            || Files.exists(Paths.get(path, "support", "analyzeHeadless.bat"));
+    }
+
+    private String promptForGhidraPath() {
+        return JOptionPane.showInputDialog(this, 
+            "GHIDRA_PATH environment variable is not set and Ghidra was not found in the app directory. " +
+            "Please enter the path to your Ghidra installation:",
+            "Ghidra Path Not Found",
+            JOptionPane.WARNING_MESSAGE);
     }
 }

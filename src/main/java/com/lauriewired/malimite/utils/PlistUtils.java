@@ -23,7 +23,7 @@ public class PlistUtils {
     }
 
     /*
-     * Takes in a binary or XML Info.plist and return the CFBundleExecutable value
+     * Takes in a binary or XML Info.plist and returns the CFBundleExecutable value
      */
     public static String extractCFBundleExecutable(NSObject plist) {
         String infoPlistBundleExecutable = "";
@@ -40,7 +40,8 @@ public class PlistUtils {
 
     /*
      * Inputs the binary plist as a byte array
-     * Returns the decoded plist in JSON gormat
+     * Returns the decoded plist in JSON format
+     * Do it this way because using the plist library instead of built-in mac libs makes this cross-platform
      */
     public static String decodeBinaryPropertyList(byte[] plistData) {
         try {

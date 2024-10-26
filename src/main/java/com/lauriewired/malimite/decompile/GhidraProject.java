@@ -2,21 +2,25 @@ package com.lauriewired.malimite.decompile;
 
 import com.lauriewired.malimite.utils.FileProcessing;
 import com.lauriewired.malimite.files.Macho;
+import com.lauriewired.malimite.configuration.Config;
+
+import java.nio.file.Paths;
 
 public class GhidraProject {
     private String ghidraProjectName;
+    private Config config;
 
-    public GhidraProject(String infoPlistBundleExecutable, String executableFilePath) {
-        this.ghidraProjectName = infoPlistBundleExecutable + "_ipax";
+    public GhidraProject(String infoPlistBundleExecutable, String executableFilePath, Config config) {
+        this.ghidraProjectName = infoPlistBundleExecutable + "_malimite";
+        this.config = config;
     }
 
     public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho) {
         try {
-            //FIXME why is this not seeing my env vars
-            //FIXME use "-scriptPath" for ghidra scripts location
-            //TODO idea: loading bar saying "decompiled 50/103 classes" during decompilation, running in the background
+            String analyzeHeadless = getAnalyzeHeadlessPath();
+
             ProcessBuilder builder = new ProcessBuilder(
-                "/Users/laurie/Documents/ghidra_11.2_PUBLIC/support/analyzeHeadless.bat",
+                analyzeHeadless,
                 projectDirectoryPath,
                 this.ghidraProjectName,
                 "-import",
@@ -26,19 +30,10 @@ public class GhidraProject {
                 projectDirectoryPath
             );
 
-            System.out.println("Analyzing classes with Ghidra" + builder.command().toString());
-            Process process = builder.start();
+            runGhidraProcess(builder, "Analyzing classes with Ghidra");
 
-            // Read output and error streams
-            FileProcessing.readStream(process.getInputStream());
-            FileProcessing.readStream(process.getErrorStream());
-
-            process.waitFor();
-            System.out.println("Finished dumping class data");
-            
-            //FIXME move to another function and make this multithreaded and run in background
             builder = new ProcessBuilder(
-                "/Users/laurie/Documents/ghidra_11.2_PUBLIC/support/analyzeHeadless.bat",
+                analyzeHeadless,
                 projectDirectoryPath,
                 this.ghidraProjectName,
                 "-postScript",
@@ -48,19 +43,29 @@ public class GhidraProject {
                 "-noanalysis"
             );
 
-            System.out.println("Running Ghidra decompilation" + builder.command().toString());
-            process = builder.start();
-
-            // Read output and error streams
-            FileProcessing.readStream(process.getInputStream());
-            FileProcessing.readStream(process.getErrorStream());
-
-            process.waitFor();
-
-            System.out.println("Done with Ghidra analysis");
+            runGhidraProcess(builder, "Running Ghidra decompilation");
 
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private String getAnalyzeHeadlessPath() {
+        String analyzeHeadless = Paths.get(config.getGhidraPath(), "support", "analyzeHeadless").toString();
+        if (config.isWindows()) {
+            analyzeHeadless += ".bat";
+        }
+        return analyzeHeadless;
+    }
+
+    private void runGhidraProcess(ProcessBuilder builder, String message) throws Exception {
+        System.out.println(message + ": " + builder.command().toString());
+        Process process = builder.start();
+
+        FileProcessing.readStream(process.getInputStream());
+        FileProcessing.readStream(process.getErrorStream());
+
+        process.waitFor();
+        System.out.println("Finished " + message.toLowerCase());
     }
 }
