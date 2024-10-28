@@ -162,7 +162,6 @@ public class Malimite extends JFrame {
             LOGGER.info("Finished extracting resources");
 
             initializeGhidraProject();
-            populateDatabase();
             populateClassesNode(classesRootNode);
     
             treeModel.reload();
@@ -188,24 +187,6 @@ public class Malimite extends JFrame {
         }
     }
 
-    private void populateDatabase() {
-        LOGGER.info("Initializing database for Malimite data");
-
-        LOGGER.info("projectDirectoryPath: " + projectDirectoryPath);
-        LOGGER.info("projectMacho.getMachoExecutableName(): " + projectMacho.getMachoExecutableName());
-
-        this.dbHandler = new SQLiteDBHandler(this.projectDirectoryPath + File.separator, this.projectMacho.getMachoExecutableName() + "_malimite.db");
-        dbHandler.populateInitialClassData(this.projectDirectoryPath + File.separator + "malimite_class_data.json");
-
-        LOGGER.info("Finished initializing database");
-
-        LOGGER.info("Adding function data to database");
-
-        dbHandler.populateFunctionData(this.projectDirectoryPath, this.projectDirectoryPath + File.separator + "functions_info.json");
-
-        LOGGER.info("Finished adding function data to database");
-    }
-
     private void initializeGhidraProject() {
         // Populate the classes based on the main executable macho
         this.projectDirectoryPath = FileProcessing.extractMachoToProjectDirectory(this.currentFilePath, 
@@ -216,7 +197,14 @@ public class Malimite extends JFrame {
         this.executableFilePath = this.projectDirectoryPath + File.separator + this.infoPlist.getExecutableName();
 
         this.projectMacho = new Macho(executableFilePath, this.projectDirectoryPath, this.infoPlist.getExecutableName());
-        ghidraProject = new GhidraProject(this.infoPlist.getExecutableName(), this.executableFilePath, this.config);
+
+        // Initialize database before creating GhidraProject
+        this.dbHandler = new SQLiteDBHandler(this.projectDirectoryPath + File.separator, 
+            this.projectMacho.getMachoExecutableName() + "_malimite.db");
+        
+        // Pass dbHandler to GhidraProject constructor
+        ghidraProject = new GhidraProject(this.infoPlist.getExecutableName(), 
+            this.executableFilePath, this.config, this.dbHandler);
     
         // Let the user select the architecture if it is a Universal binary
         if (this.projectMacho.isUniversalBinary()) {
@@ -311,25 +299,21 @@ public class Malimite extends JFrame {
             String potentialGhidraPath = Paths.get(appDir, "ghidra").toString();
 
             if (isValidGhidraPath(potentialGhidraPath)) {
-                ghidraPath = potentialGhidraPath;
-                System.setProperty("GHIDRA_PATH", ghidraPath);
-                config.setGhidraPath(ghidraPath);
-                System.out.println("Ghidra found in app directory. Set GHIDRA_PATH to: " + ghidraPath);
+                config.setGhidraPath(potentialGhidraPath);
+                System.out.println("Ghidra found in app directory: " + potentialGhidraPath);
             } else {
                 // Prompt user for Ghidra path
                 ghidraPath = promptForGhidraPath();
+                if (ghidraPath == null || ghidraPath.isEmpty()) {
+                    JOptionPane.showMessageDialog(this,
+                        "Ghidra path is required. The application will now exit.",
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE);
+                    System.exit(1);
+                }
+                config.setGhidraPath(ghidraPath);
             }
         }
-
-        if (ghidraPath == null || ghidraPath.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                "Ghidra path is required. The application will now exit.",
-                "Error",
-                JOptionPane.ERROR_MESSAGE);
-            System.exit(1);
-        }
-
-        config.setGhidraPath(ghidraPath);
     }
 
     private boolean isValidGhidraPath(String path) {
@@ -339,7 +323,6 @@ public class Malimite extends JFrame {
 
     private String promptForGhidraPath() {
         return JOptionPane.showInputDialog(this, 
-            "GHIDRA_PATH environment variable is not set and Ghidra was not found in the app directory. " +
             "Please enter the path to your Ghidra installation:",
             "Ghidra Path Not Found",
             JOptionPane.WARNING_MESSAGE);
