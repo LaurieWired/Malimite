@@ -256,12 +256,30 @@ public class Malimite extends JFrame {
 
     private void displaySelectedFileContent(TreeSelectionEvent e) {
         TreePath path = e.getPath();
-        StringBuilder fullPath = new StringBuilder();
+        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
     
-        // Skip the root node and concatenate the rest to form the full path
+        // Check if we're in the Classes root
+        if (isInClassesTree(path)) {
+            // If this is a class node (direct child of "Classes" node)
+            if (path.getPathCount() == 3) {
+                String className = node.getUserObject().toString();
+                displayClassDecompilation(className);
+                return;
+            }
+            // If this is a function node (grandchild of "Classes" node)
+            else if (path.getPathCount() == 4) {
+                DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) node.getParent();
+                String className = parentNode.getUserObject().toString();
+                displayClassDecompilation(className);
+                return;
+            }
+        }
+
+        // Original file content display logic for the Files tree
+        StringBuilder fullPath = new StringBuilder();
         for (int i = 1; i < path.getPathCount(); i++) {
             if (fullPath.length() > 0 && fullPath.charAt(fullPath.length() - 1) != '/') {
-                fullPath.append("/"); // Append '/' if it's not the last character
+                fullPath.append("/");
             }
             fullPath.append(((DefaultMutableTreeNode) path.getPathComponent(i)).getUserObject().toString());
         }
@@ -287,6 +305,27 @@ public class Malimite extends JFrame {
             } catch (IOException ex) {
                 ex.printStackTrace();
             }
+        }
+    }
+
+    private boolean isInClassesTree(TreePath path) {
+        if (path.getPathCount() < 2) return false;
+        DefaultMutableTreeNode secondNode = (DefaultMutableTreeNode) path.getPathComponent(1);
+        return secondNode.getUserObject().toString().equals("Classes");
+    }
+
+    private void displayClassDecompilation(String className) {
+        try {
+            String decompiledCode = dbHandler.getClassDecompilation(className);
+            if (decompiledCode != null && !decompiledCode.isEmpty()) {
+                fileContentArea.setText(decompiledCode);
+                fileContentArea.setCaretPosition(0);
+            } else {
+                fileContentArea.setText("No decompilation available for " + className);
+            }
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error displaying decompilation for " + className, ex);
+            fileContentArea.setText("Error loading decompilation for " + className);
         }
     }
 

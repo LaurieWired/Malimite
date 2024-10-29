@@ -117,21 +117,22 @@ public class SQLiteDBHandler {
         }
     }
 
-    public void insertFunction(String functionName, String parentClass, String classFileName) {
-        //TODO
-        /*
-        String sql = "INSERT INTO Functions(FunctionName, ParentClass, DecompilationLine) VALUES(?,?,?)";
+    public void insertFunction(String functionName, String parentClass, String decompiledCode) {
+        String sql = "INSERT INTO Functions(FunctionName, ParentClass, DecompilationCode) "
+                   + "VALUES(?,?,?) "
+                   + "ON CONFLICT(FunctionName) "
+                   + "DO UPDATE SET DecompilationCode = ?";
 
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, functionName);
             pstmt.setString(2, parentClass);
-            pstmt.setInt(3, decompilationLine);
+            pstmt.setString(3, decompiledCode);
+            pstmt.setString(4, decompiledCode);  // Value for UPDATE case
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
-        */
     }
 
     public void insertFunction(String functionName, String parentClass, int decompilationLine) {
@@ -216,5 +217,36 @@ public class SQLiteDBHandler {
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
+    }
+
+    public void updateClassDecompilation(String className, String decompiledCode) {
+        String sql = "UPDATE Classes SET DecompilationCode = ? WHERE ClassName = ?";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, decompiledCode);
+            pstmt.setString(2, className);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    public String getClassDecompilation(String className) {
+        String sql = "SELECT DecompilationCode FROM Classes WHERE ClassName = ?";
+        
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, className);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("DecompilationCode");
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return null;
     }
 }

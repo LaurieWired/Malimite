@@ -86,10 +86,18 @@ public class GhidraProject {
                     machoDataBuilder.append(line).append("\n");
                 }
 
+                LOGGER.info("Reading function decompilation data from Ghidra script");
+                StringBuilder functionDataBuilder = new StringBuilder();
+                while (!(line = in.readLine()).equals("END_DATA")) {
+                    functionDataBuilder.append(line).append("\n");
+                }
+
                 // Process and store the received data
                 JSONArray classData = new JSONArray(classDataBuilder.toString());
-                LOGGER.info("Processing " + classData.length() + " classes from Ghidra analysis");
+                JSONArray functionData = new JSONArray(functionDataBuilder.toString());
+                LOGGER.info("Processing " + classData.length() + " classes and " + functionData.length() + " functions from Ghidra analysis");
                 
+                // Process class data as before
                 for (int i = 0; i < classData.length(); i++) {
                     JSONObject classObj = classData.getJSONObject(i);
                     String className = classObj.getString("ClassName");
@@ -97,7 +105,16 @@ public class GhidraProject {
                     LOGGER.info("Inserting class: " + className + " with " + functions.length() + " functions");
                     dbHandler.insertClass(className, functions.toString());
                 }
-                LOGGER.info("Finished processing all class data");
+
+                // Process new function data
+                for (int i = 0; i < functionData.length(); i++) {
+                    JSONObject functionObj = functionData.getJSONObject(i);
+                    String className = functionObj.getString("ClassName");
+                    String decompiledCode = functionObj.getString("DecompiledCode");
+                    LOGGER.info("Updating class: " + className + " with decompiled code");
+                    dbHandler.updateClassDecompilation(className, decompiledCode);
+                }
+                LOGGER.info("Finished processing all data");
             }
     
             process.waitFor();

@@ -25,26 +25,6 @@ public class DumpClassData extends GhidraScript {
         return -1;
     }
 
-    private void sendDataViaSocket(JSONArray classData, JSONObject machoData) {
-        int port = getPort();
-        if (port == -1) return;
-
-        try (Socket socket = new Socket("localhost", port);
-             PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
-            
-            // Send class data
-            out.println(classData.toString(4));
-            out.println("END_CLASS_DATA");
-
-            // Send Macho data
-            out.println(machoData.toString(4));
-            out.println("END_MACHO_DATA");
-
-        } catch (IOException e) {
-            printerr("Error sending data via socket: " + e.getMessage());
-        }
-    }
-
     private String formatNamespaceName(String namespaceName) {
         if ("<global>".equals(namespaceName)) {
             return "Global";
@@ -117,9 +97,75 @@ public class DumpClassData extends GhidraScript {
         return new JSONObject(dataStructure);
     }
 
+    private JSONArray listFunctionsAndNamespaces(Program program) {
+        DecompInterface decompInterface = new DecompInterface();
+        FunctionManager functionManager = program.getFunctionManager();
+        Map<String, List<Function>> namespaceFunctionsMap = new HashMap<>();
+        JSONArray jsonOutput = new JSONArray();
+
+        decompInterface.openProgram(program);
+
+        // Collect functions for each namespace
+        for (Function function : functionManager.getFunctions(true)) { // true for forward direction
+            Namespace namespace = function.getParentNamespace();
+            String namespaceName = formatNamespaceName(namespace != null ? namespace.getName() : "<global>");
+            
+            // Add function to namespace map
+            namespaceFunctionsMap.computeIfAbsent(namespaceName, k -> new ArrayList<>()).add(function);
+        }
+
+        // Populate JSON data
+        for (Map.Entry<String, List<Function>> entry : namespaceFunctionsMap.entrySet()) {
+            String namespace = entry.getKey();
+            List<Function> functions = entry.getValue();
+
+            for (Function function : functions) {
+                var decompiledFunction = decompInterface.decompileFunction(function, 0, new ConsoleTaskMonitor());
+                if (decompiledFunction.decompileCompleted()) {
+                    String decompiledCode = decompiledFunction.getDecompiledFunction().getC();
+
+                    // Add JSON entry
+                    JSONObject jsonEntry = new JSONObject();
+                    jsonEntry.put("FunctionName", function.getName());
+                    jsonEntry.put("ClassName", namespace);
+                    jsonEntry.put("DecompiledCode", decompiledCode);
+                    jsonOutput.put(jsonEntry);
+                }
+            }
+        }
+
+        decompInterface.dispose();
+        return jsonOutput;
+    }
+
+    private void sendDataViaSocket(JSONArray classData, JSONObject machoData, JSONArray functionData) {
+        int port = getPort();
+        if (port == -1) return;
+
+        try (Socket socket = new Socket("localhost", port);
+             PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
+            
+            // Send class data
+            out.println(classData.toString(4));
+            out.println("END_CLASS_DATA");
+
+            // Send Macho data
+            out.println(machoData.toString(4));
+            out.println("END_MACHO_DATA");
+
+            // Send function decompilation data
+            out.println(functionData.toString(4));
+            out.println("END_DATA");
+
+        } catch (IOException e) {
+            printerr("Error sending data via socket: " + e.getMessage());
+        }
+    }
+
     @Override
     public void run() throws Exception {
-        System.err.println("Running DumpClassData script");
+        System.err.println("Running DumpCombinedData script");
+
         int port = getPort();
         if (port == -1) {
             return;
@@ -127,7 +173,8 @@ public class DumpClassData extends GhidraScript {
 
         JSONArray classData = extractClassFunctionData(currentProgram);
         JSONObject machoData = listDefinedDataInAllSegments(currentProgram);
+        JSONArray functionData = listFunctionsAndNamespaces(currentProgram);
 
-        sendDataViaSocket(classData, machoData);
+        sendDataViaSocket(classData, machoData, functionData);
     }
 }
