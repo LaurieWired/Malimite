@@ -52,7 +52,8 @@ public class GhidraProject {
                 scriptPath,
                 "-postScript",
                 "DumpClassData.java",
-                String.valueOf(PORT)
+                String.valueOf(PORT),
+                "-deleteProject"
             );
             
             // Redirect Ghidra's output and error streams to your Java application

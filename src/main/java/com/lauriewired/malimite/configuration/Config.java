@@ -9,15 +9,23 @@ public class Config {
     private static final Logger LOGGER = Logger.getLogger(Config.class.getName());
     private static final String CONFIG_FILE = "malimite.properties";
     private static final String GHIDRA_PATH_KEY = "ghidra.path";
+    private static final String THEME_KEY = "app.theme";
     
     private String osType;
     private String ghidraPath;
+    private String theme;
     private Properties properties;
 
     public Config() {
         this.osType = System.getProperty("os.name").toLowerCase();
         this.properties = new Properties();
         loadConfig();
+        
+        if (this.theme == null) {
+            this.theme = "darcula";
+            properties.setProperty(THEME_KEY, this.theme);
+            saveConfig();
+        }
     }
 
     private void loadConfig() {
@@ -26,6 +34,7 @@ public class Config {
             try (FileInputStream fis = new FileInputStream(configFile)) {
                 properties.load(fis);
                 this.ghidraPath = properties.getProperty(GHIDRA_PATH_KEY);
+                this.theme = properties.getProperty(THEME_KEY);
             } catch (IOException e) {
                 LOGGER.log(Level.WARNING, "Failed to load configuration file", e);
             }
@@ -60,6 +69,16 @@ public class Config {
 
     public boolean isUnix() {
         return osType.contains("nix") || osType.contains("nux") || osType.contains("aix");
+    }
+
+    public String getTheme() {
+        return theme;
+    }
+
+    public void setTheme(String theme) {
+        this.theme = theme;
+        properties.setProperty(THEME_KEY, theme);
+        saveConfig();
     }
 
     // TODO: Add more machine configurations as needed
