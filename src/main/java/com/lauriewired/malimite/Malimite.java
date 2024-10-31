@@ -3,11 +3,12 @@ package com.lauriewired.malimite;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
+import com.lauriewired.malimite.configuration.Config;
 import com.lauriewired.malimite.ui.AnalysisWindow;
 import com.lauriewired.malimite.ui.SyntaxUtility;
-import com.lauriewired.malimite.configuration.Config;
 import com.lauriewired.malimite.ui.SafeMenuAction;
 import com.lauriewired.malimite.ui.ApplicationMenu;
+import com.lauriewired.malimite.utils.FileProcessing;
 
 import javax.swing.*;
 
@@ -66,7 +67,7 @@ public class Malimite {
             );
             frame.setJMenuBar(applicationMenu.createMenuBar());
         
-            JPanel panel = new JPanel(new GridBagLayout());
+            JPanel panel = new JPanel(new BorderLayout(10, 10));
             frame.add(panel);
         
             setupComponents(panel, frame, config);
@@ -122,25 +123,14 @@ public class Malimite {
             }
         }
         return components;
-    }
-
-    //TODO add full functionality
-    private static void showOpenDialog() {
-        // Placeholder for the "Open" action
-        JOptionPane.showMessageDialog(null, "Open dialog would appear here.");
-    }
-    
-    private static void showSettingsDialog() {
-        // Placeholder for the "Settings" dialog
-        JOptionPane.showMessageDialog(null, "Settings dialog would appear here.");
-    }
-    
-    private static void showAboutDialog() {
-        // Placeholder for the "About" dialog
-        JOptionPane.showMessageDialog(null, "Malimite Application\nVersion 1.0");
-    }    
+    }  
 
     private static void setupComponents(JPanel panel, JFrame frame, Config config) {
+        // Use BorderLayout for the main panel
+        panel.setLayout(new BorderLayout(10, 10));
+        
+        // Create panel for file selection
+        JPanel mainPanel = new JPanel(new GridBagLayout());
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.fill = GridBagConstraints.HORIZONTAL;
         constraints.insets = new Insets(15, 15, 15, 15);
@@ -149,41 +139,95 @@ public class Malimite {
         JTextField filePathText = new JTextField();
         filePathText.setFont(new Font("Verdana", Font.PLAIN, 16));
         filePathText.setEditable(false);
-        filePathText.setPreferredSize(new Dimension(275, 30));
+        filePathText.setPreferredSize(new Dimension(400, 30));
         constraints.gridx = 0;
         constraints.gridy = 0;
         constraints.gridwidth = 3;
-        panel.add(filePathText, constraints);
+        mainPanel.add(filePathText, constraints);
 
         // "Select File" button
         JButton fileButton = new JButton("Select File");
         constraints.gridx = 3;
         constraints.gridy = 0;
         constraints.gridwidth = 1;
-        panel.add(fileButton, constraints);
-
-        // Status label
-        JLabel statusLabel = new JLabel("");
-        statusLabel.setFont(new Font("Verdana", Font.ITALIC, 14));
-        constraints.gridx = 0;
-        constraints.gridy = 2;
-        constraints.gridwidth = 4;
-        panel.add(statusLabel, constraints);
+        mainPanel.add(fileButton, constraints);
 
         // "Analyze" button
         JButton analyzeButton = new JButton("Analyze File");
         constraints.gridx = 0;
         constraints.gridy = 1;
         constraints.gridwidth = 4;
-        panel.add(analyzeButton, constraints);
+        mainPanel.add(analyzeButton, constraints);
+
+        // Add components to main panel
+        panel.add(mainPanel, BorderLayout.NORTH);
+
+        // Add recent projects panel
+        JPanel recentProjectsPanel = new JPanel(new BorderLayout());
+        recentProjectsPanel.setBorder(BorderFactory.createTitledBorder("Recent Projects"));
+        
+        JPanel projectsListPanel = new JPanel();
+        projectsListPanel.setLayout(new BoxLayout(projectsListPanel, BoxLayout.Y_AXIS));
+        
+        // Get and add recent projects
+        List<String> projectPaths = FileProcessing.getProjectPaths();
+        LOGGER.info("Retrieved project paths: " + projectPaths);
+        
+        for (String path : projectPaths) {
+            LOGGER.info("Processing project path: " + path);
+            JButton projectButton = new JButton(path);
+            projectButton.setHorizontalAlignment(SwingConstants.LEFT);
+            projectButton.setBorderPainted(false);
+            projectButton.setContentAreaFilled(false);
+            projectButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            
+            projectButton.addActionListener(e -> {
+                File originalFile = new File(path);
+                String parentDir = originalFile.getParent();
+                String fileName = originalFile.getName();
+                
+                // Remove file extension from fileName if it exists
+                int lastDotIndex = fileName.lastIndexOf('.');
+                if (lastDotIndex > 0) {
+                    fileName = fileName.substring(0, lastDotIndex);
+                }
+                
+                LOGGER.info("Original file path: " + originalFile.getAbsolutePath());
+                LOGGER.info("Parent directory: " + parentDir);
+                LOGGER.info("File name without extension: " + fileName);
+                
+                File projectFile = new File(parentDir + File.separator + fileName + "_malimite" + File.separator + "project.json");
+                LOGGER.info("Looking for project file at: " + projectFile.getAbsolutePath());
+                LOGGER.info("Project file exists: " + projectFile.exists());
+                
+                if (projectFile.exists()) {
+                    LOGGER.info("Opening analysis window for: " + path);
+                    AnalysisWindow.show(new File(path), config);
+                } else {
+                    LOGGER.warning("Project directory not found at: " + projectFile.getAbsolutePath());
+                    JOptionPane.showMessageDialog(frame,
+                        "Project directory no longer exists.",
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE);
+                }
+            });
+            
+            projectsListPanel.add(projectButton);
+        }
+        
+        JScrollPane scrollPane = new JScrollPane(projectsListPanel);
+        scrollPane.setPreferredSize(new Dimension(0, 150));
+        recentProjectsPanel.add(scrollPane, BorderLayout.CENTER);
+        
+        panel.add(recentProjectsPanel, BorderLayout.CENTER);
 
         // Set up file listeners
-        setupDragAndDrop(filePathText, statusLabel);
+        setupDragAndDrop(filePathText);
         setupFileButtonListener(fileButton, filePathText);
-        setupAnalyzeButtonListener(analyzeButton, filePathText, statusLabel, config);
+        setupAnalyzeButtonListener(analyzeButton, filePathText, config);
     }
 
-    private static void setupDragAndDrop(JTextField filePathText, JLabel statusLabel) {
+    private static void setupDragAndDrop(JTextField filePathText) {
         new DropTarget(filePathText, new DropTargetAdapter() {
             @Override
             public void drop(DropTargetDropEvent evt) {
@@ -193,11 +237,9 @@ public class Malimite {
                     if (!droppedFiles.isEmpty()) {
                         File file = droppedFiles.get(0);
                         filePathText.setText(file.getAbsolutePath());
-                        statusLabel.setText("File ready for analysis.");
                     }
                 } catch (Exception ex) {
                     LOGGER.severe("Error during file drop: " + ex.getMessage());
-                    statusLabel.setText("Error loading file.");
                 }
             }
         });
@@ -215,14 +257,16 @@ public class Malimite {
         });
     }
 
-    private static void setupAnalyzeButtonListener(JButton analyzeButton, JTextField filePathText, JLabel statusLabel, Config config) {
+    private static void setupAnalyzeButtonListener(JButton analyzeButton, JTextField filePathText, Config config) {
         analyzeButton.addActionListener(e -> {
             String filePath = filePathText.getText();
             if (!filePath.isEmpty() && Files.exists(Paths.get(filePath))) {
-                // Trigger AnalysisWindow with the updated method call
                 AnalysisWindow.show(new File(filePath), config);
             } else {
-                statusLabel.setText("Please select a valid file path.");
+                JOptionPane.showMessageDialog(null, 
+                    "Please select a valid file path.", 
+                    "Invalid File", 
+                    JOptionPane.WARNING_MESSAGE);
             }
         });
     }    

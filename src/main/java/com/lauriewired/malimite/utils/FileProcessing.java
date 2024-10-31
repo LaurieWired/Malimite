@@ -11,8 +11,20 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import com.google.gson.reflect.TypeToken;
+import java.lang.reflect.Type;
+
+import com.lauriewired.malimite.configuration.Project;
 
 public class FileProcessing {
+    private static String configDirectory = ".";
+    private static final String PROJECTS_FILENAME = "malimite.projects";
 
     public static void readStream(InputStream stream) {
         new Thread(() -> {
@@ -28,11 +40,18 @@ public class FileProcessing {
     }
 
     public static void unzipExecutable(String zipFilePath, String executableName, String outputFilePath) throws IOException {
+        System.out.println("Attempting to unzip executable from: " + zipFilePath);
+        System.out.println("Looking for executable: " + executableName);
+        System.out.println("Output path: " + outputFilePath);
+        
         try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(zipFilePath))) {
             ZipEntry entry = zipIn.getNextEntry();
             while (entry != null) {
+                System.out.println("Examining zip entry: " + entry.getName());
                 if (!entry.isDirectory() && entry.getName().endsWith(executableName)) {
+                    System.out.println("Found matching executable, extracting...");
                     extractFile(zipIn, outputFilePath);
+                    System.out.println("Successfully extracted executable to: " + outputFilePath);
                     break;
                 }
                 zipIn.closeEntry();
@@ -43,7 +62,7 @@ public class FileProcessing {
 
     public static void extractFile(ZipInputStream zipIn, String filePath) throws IOException {
         try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(filePath))) {
-            byte[] bytesIn = new byte[4096]; //TODO: remove magic number
+            byte[] bytesIn = new byte[4096];
             int read;
             while ((read = zipIn.read(bytesIn)) != -1) {
                 bos.write(bytesIn, 0, read);
@@ -95,32 +114,128 @@ public class FileProcessing {
      * Creates a new malimite project if it doesn't exist
      * Otherwise, reopens an existing project
      */
-    public static void openProject(String filePath, String projectDirectoryPath, String executableName) {
+    public static void openProject(String filePath, String projectDirectoryPath, String executableName, String configDir) {
+        setConfigDirectory(configDir);  // Set the config directory before any operations
+        
         // Create malimite project directory
         File projectDirectory = new File(projectDirectoryPath);
         if (!projectDirectory.exists()) {
             if (projectDirectory.mkdir()) {
                 System.out.println("Created project directory: " + projectDirectoryPath);
+                
+                // Create and save initial project configuration
+                Project project = new Project();
+                project.setFileName(executableName);
+                project.setFilePath(filePath);
+                project.setFileSize(new File(filePath).length());
+                
+                saveProjectConfig(projectDirectoryPath, project);
+                addProjectToList(filePath);
+
+                // Unzip the executable into the new project directory
+                String outputFilePath = projectDirectoryPath + File.separator + executableName;
+                try {
+                    unzipExecutable(filePath, executableName, outputFilePath);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             } else {
                 System.out.println("Failed to create project directory: " + projectDirectoryPath);
                 return;
             }
-
-            // Unzip the executable into the new project directory
-            // Unfortunately we have to extract it for ghidra to process it in headless mode
-            String outputFilePath = projectDirectoryPath + File.separator + executableName;
-            try {
-                unzipExecutable(filePath, executableName, outputFilePath);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
         } else {
-            //TODO: add handling for reopening an existing malimite project
-            //System.out.println("Project '" + this.ghidraProjectName + "' already exists.");
-
-            //will need to add project name + classes + xrefs + user comments
-            //reopening will populate this into malimite
-            //maybe should add resource node structure here as an optimization
+            // Load existing project configuration
+            Project project = loadProjectConfig(projectDirectoryPath);
+            if (project != null) {
+                System.out.println("Loaded existing project: " + project.getFileName());
+            }
         }
+    }
+
+    private static void saveProjectConfig(String projectDirectoryPath, Project project) {
+        try {
+            File configFile = new File(projectDirectoryPath + File.separator + "project.json");
+            // Create parent directories if they don't exist
+            configFile.getParentFile().mkdirs();
+            // Create the file if it doesn't exist
+            if (!configFile.exists()) {
+                configFile.createNewFile();
+            }
+            
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            String json = gson.toJson(project);
+            Files.writeString(configFile.toPath(), json);
+            System.out.println("Successfully saved project config");
+        } catch (IOException e) {
+            System.err.println("Failed to save project configuration: " + e.getMessage());
+        }
+    }
+
+    private static Project loadProjectConfig(String projectDirectoryPath) {
+        try {
+            String configPath = projectDirectoryPath + File.separator + "project.json";
+            String json = Files.readString(Paths.get(configPath));
+            Gson gson = new Gson();
+            return gson.fromJson(json, Project.class);
+        } catch (IOException e) {
+            System.err.println("Failed to load project configuration: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static void addProjectToList(String projectPath) {
+        List<String> projects = loadProjectsList();
+        if (!projects.contains(projectPath)) {
+            projects.add(projectPath);
+            saveProjectsList(projects);
+        }
+    }
+
+    private static List<String> loadProjectsList() {
+        try {
+            File projectsFile = new File(getProjectsFilePath());
+            // Ensure the directory exists
+            projectsFile.getParentFile().mkdirs();
+            
+            if (projectsFile.exists()) {
+                String json = Files.readString(Paths.get(getProjectsFilePath()));
+                Gson gson = new Gson();
+                Type listType = new TypeToken<ArrayList<String>>(){}.getType();
+                return gson.fromJson(json, listType);
+            }
+        } catch (IOException e) {
+            System.err.println("Failed to load projects list: " + e.getMessage());
+        }
+        return new ArrayList<>();
+    }
+
+    private static void saveProjectsList(List<String> projects) {
+        try {
+            String projectsPath = getProjectsFilePath();
+            System.out.println("Saving projects list to: " + projectsPath);
+            System.out.println("Projects to save: " + String.join(", ", projects));
+            
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            String json = gson.toJson(projects);
+            Files.writeString(Paths.get(projectsPath), json);
+            System.out.println("Successfully saved projects list");
+        } catch (IOException e) {
+            System.err.println("Failed to save projects list: " + e.getMessage());
+        }
+    }
+
+    // Add this utility method to get all known project paths
+    public static List<String> getProjectPaths() {
+        return loadProjectsList();
+    }
+
+    // Add this method to set the config directory
+    public static void setConfigDirectory(String directory) {
+        configDirectory = directory;
+    }
+
+    // Update to use configDirectory
+    private static String getProjectsFilePath() {
+        return configDirectory + File.separator + PROJECTS_FILENAME;
     }
 }

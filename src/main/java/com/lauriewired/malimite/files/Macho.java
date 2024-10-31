@@ -137,6 +137,50 @@ public class Macho {
         }
     }
 
+    public static class Architecture {
+        private String name;
+        private int cpuType;
+        private int cpuSubType;
+        
+        public Architecture(String name, int cpuType, int cpuSubType) {
+            this.name = name;
+            this.cpuType = cpuType;
+            this.cpuSubType = cpuSubType;
+        }
+        
+        @Override
+        public String toString() {
+            return name + " (CPU Type: " + cpuType + ", SubType: " + cpuSubType + ")";
+        }
+        
+        // Getters
+        public String getName() { return name; }
+        public int getCpuType() { return cpuType; }
+        public int getCpuSubType() { return cpuSubType; }
+    }
+
+    private String getArchitectureName(int cpuType) {
+        switch (cpuType) {
+            case 0x00000007: return "Intel x86";
+            case 0x01000007: return "Intel x86_64";
+            case 0x0000000C: return "ARM";
+            case 0x0100000C: return "ARM64";
+            default: return "Unknown";
+        }
+    }
+
+    public List<Architecture> getArchitectures() {
+        List<Architecture> architectures = new ArrayList<>();
+        for (int i = 0; i < cpuTypes.size(); i++) {
+            architectures.add(new Architecture(
+                getArchitectureName(cpuTypes.get(i)),
+                cpuTypes.get(i),
+                cpuSubTypes.get(i)
+            ));
+        }
+        return architectures;
+    }
+
     public List<String> getArchitectureStrings() {
         List<String> architectureStrings = new ArrayList<>();
 
@@ -168,21 +212,6 @@ public class Macho {
 
     private String generateFullArchitectureString(String arch, int cpuType, int cpuSubType) {
         return arch + " (CPU Type: " + cpuType + ", SubType: " + cpuSubType + ")";
-    }
-
-    private String getArchitectureName(int cpuType) {
-        switch (cpuType) {
-            case 0x00000007:
-                return "Intel x86";
-            case 0x01000007:
-                return "Intel x86_64";
-            case 0x0000000C:
-                return "ARM";
-            case 0x0100000C:
-                return "ARM64";
-            default:
-                return "Unknown";
-        }
     }
 
     public List<Integer> getCpuTypes() {

@@ -2,7 +2,6 @@ package com.lauriewired.malimite.utils;
 
 import java.util.Arrays;
 
-import com.dd.plist.NSDictionary;
 import com.dd.plist.NSObject;
 import com.dd.plist.PropertyListParser;
 import com.google.gson.Gson;
@@ -20,22 +19,6 @@ public class PlistUtils {
         String header = new String(Arrays.copyOf(contentBytes, "bplist".length()));
 
         return header.equals("bplist");
-    }
-
-    /*
-     * Takes in a binary or XML Info.plist and returns the CFBundleExecutable value
-     */
-    public static String extractCFBundleExecutable(NSObject plist) {
-        String infoPlistBundleExecutable = "";
-
-        if (plist instanceof NSDictionary) {
-            NSDictionary dict = (NSDictionary) plist;
-            String executableName = dict.objectForKey("CFBundleExecutable").toString();
-
-            infoPlistBundleExecutable = executableName;
-        }
-
-        return infoPlistBundleExecutable;
     }
 
     /*

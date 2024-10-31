@@ -16,10 +16,12 @@ public class Config {
     private String ghidraPath;
     private String theme;
     private Properties properties;
+    private String configDirectory;
 
     public Config() {
         this.osType = System.getProperty("os.name").toLowerCase();
         this.properties = new Properties();
+        this.configDirectory = ".";
         loadConfig();
         
         properties.setProperty(OS_TYPE_KEY, this.osType);
@@ -36,6 +38,7 @@ public class Config {
         if (configFile.exists()) {
             try (FileInputStream fis = new FileInputStream(configFile)) {
                 properties.load(fis);
+                this.configDirectory = configFile.getParent() != null ? configFile.getParent() : ".";
                 this.ghidraPath = properties.getProperty(GHIDRA_PATH_KEY);
                 this.theme = properties.getProperty(THEME_KEY);
                 this.osType = properties.getProperty(OS_TYPE_KEY, System.getProperty("os.name").toLowerCase());
@@ -85,5 +88,7 @@ public class Config {
         saveConfig();
     }
 
-    // TODO: Add more machine configurations as needed
+    public String getConfigDirectory() {
+        return configDirectory;
+    }
 }

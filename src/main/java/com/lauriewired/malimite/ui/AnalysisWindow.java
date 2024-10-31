@@ -29,7 +29,7 @@ import com.lauriewired.malimite.files.Macho;
 import com.lauriewired.malimite.utils.FileProcessing;
 import com.lauriewired.malimite.utils.NodeOperations;
 import com.lauriewired.malimite.utils.PlistUtils;
-
+import com.lauriewired.malimite.configuration.Project;
 public class AnalysisWindow {
     private static final Logger LOGGER = Logger.getLogger(AnalysisWindow.class.getName());
 
@@ -119,26 +119,94 @@ public class AnalysisWindow {
         // Add RSyntaxTextArea to RTextScrollPane
         RTextScrollPane contentScrollPane = new RTextScrollPane(fileContentArea);
     
-        JPanel leftPanel = new JPanel();
-        leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
-        leftPanel.add(fileNameLabel);
-        leftPanel.add(treeScrollPane);
-    
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, contentScrollPane);
+        // Create info display panel
+        JTextPane infoDisplay = new JTextPane();
+        infoDisplay.setContentType("text/html");
+        infoDisplay.setEditable(false);
+        infoDisplay.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
+        
+        // Create a scroll pane for the info display
+        JScrollPane infoScrollPane = new JScrollPane(infoDisplay);
+        infoScrollPane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+        // Create left panel with vertical split
+        JPanel leftPanel = new JPanel(new BorderLayout());
+        
+        // Create a panel for the tree
+        JPanel treePanel = new JPanel(new BorderLayout());
+        treePanel.add(fileNameLabel, BorderLayout.NORTH);
+        treePanel.add(treeScrollPane, BorderLayout.CENTER);
+        
+        // Create vertical split pane for tree and info
+        JSplitPane leftSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, treePanel, infoScrollPane);
+        leftSplitPane.setResizeWeight(0.7); // This will give 70% to tree by default
+        
+        // Add the split pane to left panel
+        leftPanel.add(leftSplitPane, BorderLayout.CENTER);
+
+        // Create bundle identifier panel (updated)
+        JPanel bundleIdPanel = new JPanel(new BorderLayout());
+        bundleIdPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        JLabel bundleIdValue = new JLabel("Loading...", SwingConstants.CENTER);
+        bundleIdValue.setFont(bundleIdValue.getFont().deriveFont(Font.BOLD));
+        bundleIdPanel.add(bundleIdValue, BorderLayout.CENTER);
+
+        // Create right panel to hold bundle ID and content
+        JPanel rightPanel = new JPanel(new BorderLayout());
+        rightPanel.add(bundleIdPanel, BorderLayout.NORTH);
+        rightPanel.add(contentScrollPane, BorderLayout.CENTER);
+
+        // Update the split pane to use the right panel instead of just contentScrollPane
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightPanel);
         splitPane.setDividerLocation(300);
-    
+
+        // Update the file info display
+        updateFileInfo(new File(currentFilePath), infoDisplay);
+
         JPanel contentPanel = new JPanel(new BorderLayout());
         contentPanel.add(splitPane, BorderLayout.CENTER);
+        analysisFrame.getContentPane().add(contentPanel, BorderLayout.CENTER);
         return contentPanel;
+    }
+
+    private static void updateFileInfo(File file, JTextPane infoDisplay) {
+        Project project = new Project();
+        project.setFileName(file.getName());
+        project.setFilePath(file.getAbsolutePath());
+        project.setFileSize(file.length());
+        
+        try {
+            // Check if it's a Mach-O file
+            Macho macho = new Macho(file.getAbsolutePath(), 
+                                   file.getParent(), 
+                                   file.getName());
+            
+            project.setIsMachO(true);
+            project.setMachoInfo(macho);
+            
+            if (macho.isUniversalBinary()) {
+                project.setFileType("Universal Mach-O Binary");
+            } else {
+                project.setFileType("Single Architecture Mach-O");
+            }
+        } catch (Exception ex) {
+            project.setFileType("Unknown or unsupported file format");
+            project.setIsMachO(false);
+            LOGGER.warning("Error reading file format: " + ex.getMessage());
+        }
+        
+        infoDisplay.setText(project.generateInfoString());
     }
 
     private static void loadAndAnalyzeFile(File file, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
         LOGGER.info("Starting analysis on " + file.getName());
         fileNameLabel.setText(file.getName());
+        LOGGER.info("Clearing previous tree data");
         filesRootNode.removeAllChildren();
         treeModel.reload();
         fileEntriesMap.clear();
         fileContentArea.setText("");
+        LOGGER.info("Beginning file unzip and analysis process");
         unzipAndLoadToTree(file, filesRootNode, classesRootNode);
     }
 
@@ -163,7 +231,7 @@ public class AnalysisWindow {
             }
             LOGGER.info("Finished extracting resources");
 
-            initializeGhidraProject();
+            initializeProject();
             populateClassesNode(classesRootNode);
     
             treeModel.reload();
@@ -174,50 +242,68 @@ public class AnalysisWindow {
     }
     
     private static void populateClassesNode(DefaultMutableTreeNode classesRootNode) {
+        LOGGER.info("Populating classes tree...");
         classesRootNode.removeAllChildren();
         Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
+        LOGGER.info("Retrieved " + classesAndFunctions.size() + " classes from database");
 
         for (Map.Entry<String, List<String>> entry : classesAndFunctions.entrySet()) {
             String className = entry.getKey();
             List<String> functions = entry.getValue();
-
+            LOGGER.fine("Adding class: " + className + " with " + functions.size() + " functions");
             DefaultMutableTreeNode classNode = new DefaultMutableTreeNode(className);
             for (String function : functions) {
                 classNode.add(new DefaultMutableTreeNode(function));
             }
             classesRootNode.add(classNode);
         }
+        LOGGER.info("Finished populating classes tree");
     }
 
-    private static void initializeGhidraProject() {
-        // Populate the classes based on the main executable macho
+    private static void initializeProject() {
+        LOGGER.info("Initializing project...");
         projectDirectoryPath = FileProcessing.extractMachoToProjectDirectory(currentFilePath, 
-            infoPlist.getExecutableName(), projectDirectoryPath);
-        FileProcessing.openProject(currentFilePath, projectDirectoryPath, infoPlist.getExecutableName());
+            infoPlist.getExecutableName(), config.getConfigDirectory());
+        LOGGER.info("Project directory created at: " + projectDirectoryPath);
 
-        // Run ghidra command to perform the decompilation
+        FileProcessing.openProject(currentFilePath, projectDirectoryPath, 
+            infoPlist.getExecutableName(), config.getConfigDirectory());
+
         executableFilePath = projectDirectoryPath + File.separator + infoPlist.getExecutableName();
-
+        LOGGER.info("Loading Mach-O file: " + executableFilePath);
         projectMacho = new Macho(executableFilePath, projectDirectoryPath, infoPlist.getExecutableName());
 
-        // Initialize database before creating GhidraProject
-        dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
-            projectMacho.getMachoExecutableName() + "_malimite.db");
+        String dbFilePath = projectDirectoryPath + File.separator + 
+            projectMacho.getMachoExecutableName() + "_malimite.db";
+        LOGGER.info("Checking for database at: " + dbFilePath);
+
+        File dbFile = new File(dbFilePath);
+        if (!dbFile.exists()) {
+            LOGGER.info("Database not found. Creating new database...");
+            dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
+                projectMacho.getMachoExecutableName() + "_malimite.db");
+
+            LOGGER.info("Starting Ghidra analysis...");
+            ghidraProject = new GhidraProject(infoPlist.getExecutableName(), 
+                executableFilePath, config, dbHandler);
         
-        // Pass dbHandler to GhidraProject constructor
-        ghidraProject = new GhidraProject(infoPlist.getExecutableName(), 
-            executableFilePath, config, dbHandler);
-    
-        // Let the user select the architecture if it is a Universal binary
-        if (projectMacho.isUniversalBinary()) {
-            List<String> architectures = projectMacho.getArchitectureStrings();
-            String selectedArchitecture = selectArchitecture(architectures);
-            if (selectedArchitecture != null) {
-                projectMacho.processUniversalMacho(selectedArchitecture);
+            if (projectMacho.isUniversalBinary()) {
+                LOGGER.info("Universal binary detected. Prompting for architecture selection...");
+                List<String> architectures = projectMacho.getArchitectureStrings();
+                String selectedArchitecture = selectArchitecture(architectures);
+                if (selectedArchitecture != null) {
+                    LOGGER.info("Selected architecture: " + selectedArchitecture);
+                    projectMacho.processUniversalMacho(selectedArchitecture);
+                }
             }
+            projectMacho.printArchitectures();
+            LOGGER.info("Starting Ghidra decompilation process...");
+            ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, projectMacho);
+        } else {
+            LOGGER.info("Using existing database from previous analysis");
+            dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
+                projectMacho.getMachoExecutableName() + "_malimite.db");
         }
-        projectMacho.printArchitectures();
-        ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, projectMacho);
     }
 
     private static String selectArchitecture(List<String> architectures) {
@@ -239,6 +325,7 @@ public class AnalysisWindow {
             appNode.add(currentNode);
             fileEntriesMap.put(NodeOperations.buildFullPathFromNode(currentNode), entry.getName());
             infoPlist = new InfoPlist(currentNode, currentFilePath, fileEntriesMap);
+            updateBundleIdDisplay(infoPlist.getBundleIdentifier());
         } else {
             // Create or get the "Resources" node and add other files to it
             currentNode = NodeOperations.addOrGetNode(appNode, "Resources", true);
@@ -333,5 +420,27 @@ public class AnalysisWindow {
 
     public static void safeMenuAction(Runnable action) {
         SafeMenuAction.execute(action);
+    }
+    // Add method to update bundle ID display (simplified)
+    private static void updateBundleIdDisplay(String bundleId) {
+        SwingUtilities.invokeLater(() -> {
+            Container contentPane = analysisFrame.getContentPane();
+            Component mainPanel = contentPane.getComponent(0);
+            if (mainPanel instanceof JPanel) {
+                JSplitPane splitPane = (JSplitPane) ((JPanel)mainPanel).getComponent(0);
+                Component rightComp = splitPane.getRightComponent();
+                if (rightComp instanceof JPanel) {
+                    JPanel rightPanel = (JPanel)rightComp;
+                    Component bundlePanel = rightPanel.getComponent(0);
+                    if (bundlePanel instanceof JPanel) {
+                        JPanel bundleIdPanel = (JPanel)bundlePanel;
+                        Component valueLabel = bundleIdPanel.getComponent(0);
+                        if (valueLabel instanceof JLabel) {
+                            ((JLabel)valueLabel).setText(bundleId != null ? bundleId : "N/A");
+                        }
+                    }
+                }
+            }
+        });
     }
 }

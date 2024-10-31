@@ -23,33 +23,31 @@
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
       <version>2.10.1</version>
-  </dependency>
-  <dependency>
-      <groupId>org.xerial</groupId>
-      <artifactId>sqlite-jdbc</artifactId>
-      <version>3.44.1.0</version>
-  </dependency>
-  <dependency>
-      <groupId>org.json</groupId>
-      <artifactId>json</artifactId>
-      <version>20231013</version>
-  </dependency>
-  <dependency>
-      <groupId>org.antlr</groupId>
-      <artifactId>antlr4-runtime</artifactId>
-      <version>4.13.1</version>
-  </dependency>
-  <dependency>
-      <groupId>com.fifesoft</groupId>
-      <artifactId>rsyntaxtextarea</artifactId>
-      <version>3.4.0</version>
-  </dependency>
-
-  <dependency>
-    <groupId>com.formdev</groupId>
-    <artifactId>flatlaf</artifactId>
-    <version>3.5.2</version>
-</dependency>
-
+    </dependency>
+    <dependency>
+        <groupId>org.xerial</groupId>
+        <artifactId>sqlite-jdbc</artifactId>
+        <version>3.44.1.0</version>
+    </dependency>
+    <dependency>
+        <groupId>org.json</groupId>
+        <artifactId>json</artifactId>
+        <version>20231013</version>
+    </dependency>
+    <dependency>
+        <groupId>org.antlr</groupId>
+        <artifactId>antlr4-runtime</artifactId>
+        <version>4.13.1</version>
+    </dependency>
+    <dependency>
+        <groupId>com.fifesoft</groupId>
+        <artifactId>rsyntaxtextarea</artifactId>
+        <version>3.4.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.formdev</groupId>
+      <artifactId>flatlaf</artifactId>
+      <version>3.5.2</version>
+    </dependency>
   </dependencies>
 </project>
