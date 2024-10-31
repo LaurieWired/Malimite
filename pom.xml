@@ -40,9 +40,16 @@
       <version>4.13.1</version>
   </dependency>
   <dependency>
-      <groupId>com.github.weisj</groupId>
-      <artifactId>darklaf-core</artifactId>
-      <version>3.0.2</version>
+      <groupId>com.fifesoft</groupId>
+      <artifactId>rsyntaxtextarea</artifactId>
+      <version>3.4.0</version>
   </dependency>
+
+  <dependency>
+    <groupId>com.formdev</groupId>
+    <artifactId>flatlaf</artifactId>
+    <version>3.5.2</version>
+</dependency>
+
   </dependencies>
 </project>

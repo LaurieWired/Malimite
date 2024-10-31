@@ -51,4 +51,10 @@ public class NodeOperations {
         parentNode.add(newNode);
         return newNode;
     }
+
+    public static void expandAllTreeNodes(JTree fileTree) {
+        for (int i = 0; i < fileTree.getRowCount(); i++) {
+            fileTree.expandRow(i);
+        }
+    }
 }

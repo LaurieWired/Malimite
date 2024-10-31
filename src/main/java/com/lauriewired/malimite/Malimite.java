@@ -1,14 +1,18 @@
 package com.lauriewired.malimite;
 
-import com.github.weisj.darklaf.LafManager;
-import com.github.weisj.darklaf.theme.DarculaTheme;
-import com.github.weisj.darklaf.theme.IntelliJTheme;
-import com.github.weisj.darklaf.theme.SolarizedLightTheme;
-import com.github.weisj.darklaf.theme.SolarizedDarkTheme;
+import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.FlatDarkLaf;
+import com.formdev.flatlaf.FlatLaf;
 import com.lauriewired.malimite.ui.AnalysisWindow;
+import com.lauriewired.malimite.ui.SyntaxUtility;
 import com.lauriewired.malimite.configuration.Config;
+import com.lauriewired.malimite.ui.SafeMenuAction;
+import com.lauriewired.malimite.ui.ApplicationMenu;
 
 import javax.swing.*;
+
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.dnd.DnDConstants;
@@ -18,186 +22,108 @@ import java.awt.dnd.DropTargetDropEvent;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
 public class Malimite {
     private static final Logger LOGGER = Logger.getLogger(Malimite.class.getName());
 
-    // Add these as class fields at the top of the Malimite class
-    private static JDialog preferencesDialog = null;
-    private static boolean menuActionInProgress = false;
-    private static final Object menuLock = new Object();
-
     public static void main(String[] args) {
-        // Install Darklaf once at startup with an initial theme
-        LafManager.setTheme(new DarculaTheme());
-        LafManager.install();
-
-        SwingUtilities.invokeLater(Malimite::createAndShowGUI);
-    }
-
-    private static void createAndShowGUI() {
-        JFrame frame = new JFrame("Malimite");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(600, 400);
-        frame.setLocationRelativeTo(null);
-    
-        // Initialize Config for handling paths
+        // Load or create config immediately
         Config config = new Config();
-    
-        // Set theme based on config
-        updateTheme(config.getTheme());
-    
-        // Add the menu bar
-        frame.setJMenuBar(createMenuBar(config));
-    
-        JPanel panel = new JPanel(new GridBagLayout());
-        frame.add(panel);
-    
-        setupComponents(panel, frame, config);
-    
-        frame.setVisible(true);
-    }
-    
-    private static JMenuBar createMenuBar(Config config) {
-        JMenuBar menuBar = new JMenuBar();
-    
-        // File Menu
-        JMenu fileMenu = new JMenu("File");
-        JMenuItem openItem = new JMenuItem("Open...");
-        JMenuItem preferencesItem = new JMenuItem("Preferences");
-        JMenuItem exitItem = new JMenuItem("Exit");
-        fileMenu.add(openItem);
-        fileMenu.add(preferencesItem);
-        fileMenu.addSeparator();
-        fileMenu.add(exitItem);
-    
-        // Tools Menu
-        JMenu toolsMenu = new JMenu("Tools");
-        JMenuItem pluginsItem = new JMenuItem("Plugins");
-        toolsMenu.add(pluginsItem);
-    
-        // Help Menu
-        JMenu helpMenu = new JMenu("Help");
-        JMenuItem aboutItem = new JMenuItem("About");
-        helpMenu.add(aboutItem);
-    
-        // Add menus to the menu bar
-        menuBar.add(fileMenu);
-        menuBar.add(toolsMenu);
-        menuBar.add(helpMenu);
-    
-        // Add action listeners for menu items
-        openItem.addActionListener(e -> safeMenuAction(() -> showOpenDialog()));
-        preferencesItem.addActionListener(e -> safeMenuAction(() -> showPreferencesDialog(config)));
-        exitItem.addActionListener(e -> safeMenuAction(() -> System.exit(0)));
-        pluginsItem.addActionListener(e -> safeMenuAction(() -> showSettingsDialog()));
-        aboutItem.addActionListener(e -> safeMenuAction(() -> showAboutDialog()));
-    
-        return menuBar;
-    }
-    
-    private static void showPreferencesDialog(Config config) {
-        // If dialog is already showing, bring it to front
-        if (preferencesDialog != null && preferencesDialog.isVisible()) {
-            preferencesDialog.requestFocus();
-            return;
+        
+        // Enable macOS-specific properties if on Mac
+        if (config.isMac()) {
+            System.setProperty("apple.laf.useScreenMenuBar", "true");
+            //System.setProperty("apple.awt.application.appearance", "system");
         }
         
-        // If dialog exists but not visible, dispose it
-        if (preferencesDialog != null) {
-            preferencesDialog.dispose();
+        // Set initial FlatLaf theme based on config
+        if (config.getTheme().equals("dark")) {
+            FlatDarkLaf.setup();
+        } else {
+            FlatLightLaf.setup();
         }
+    
+        SwingUtilities.invokeLater(() -> createAndShowGUI(config));
+    }
+
+    private static void createAndShowGUI(Config config) {
+        SafeMenuAction.execute(() -> {
+            JFrame frame = new JFrame("Malimite");
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setSize(600, 400);
+            frame.setLocationRelativeTo(null);
         
-        // Create new dialog
-        preferencesDialog = new JDialog((JFrame) null, "Preferences", true);
-        preferencesDialog.setLayout(new BorderLayout());
+            // Config is now passed in from main
         
-        JPanel panel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
+            // Add the menu bar
+            ApplicationMenu applicationMenu = new ApplicationMenu(
+                frame, 
+                null,  // null since main window might not have a file tree
+                config
+            );
+            frame.setJMenuBar(applicationMenu.createMenuBar());
         
-        // Theme selection
-        JLabel themeLabel = new JLabel("Theme:");
-        String[] themes = {"darcula", "intellij", "solarized-light", "solarized-dark"};
-        JComboBox<String> themeCombo = new JComboBox<>(themes);
-        themeCombo.setSelectedItem(config.getTheme());
+            JPanel panel = new JPanel(new GridBagLayout());
+            frame.add(panel);
         
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        panel.add(themeLabel, gbc);
+            setupComponents(panel, frame, config);
         
-        gbc.gridx = 1;
-        panel.add(themeCombo, gbc);
-        
-        // Buttons
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton saveButton = new JButton("Save");
-        JButton cancelButton = new JButton("Cancel");
-        
-        saveButton.addActionListener(e -> {
-            String selectedTheme = (String) themeCombo.getSelectedItem();
-            preferencesDialog.setVisible(false); // Hide dialog before theme change
-            config.setTheme(selectedTheme);
-            SwingUtilities.invokeLater(() -> {
-                updateTheme(selectedTheme);
-                preferencesDialog.dispose();
-                preferencesDialog = null;
-            });
+            frame.setVisible(true);
         });
-        
-        cancelButton.addActionListener(e -> {
-            preferencesDialog.dispose();
-            preferencesDialog = null;
-        });
-        
-        buttonPanel.add(saveButton);
-        buttonPanel.add(cancelButton);
-        
-        preferencesDialog.add(panel, BorderLayout.CENTER);
-        preferencesDialog.add(buttonPanel, BorderLayout.SOUTH);
-        
-        preferencesDialog.pack();
-        preferencesDialog.setLocationRelativeTo(null);
-        preferencesDialog.setVisible(true);
-        
-        // Add window listener to clean up on close
-        preferencesDialog.addWindowListener(new java.awt.event.WindowAdapter() {
-            @Override
-            public void windowClosing(java.awt.event.WindowEvent windowEvent) {
-                preferencesDialog.dispose();
-                preferencesDialog = null;
+    }
+    
+    public static void updateTheme(String theme) {
+        SafeMenuAction.execute(() -> {
+            switch (theme) {
+                case "dark":
+                    FlatDarkLaf.setup();
+                    break;
+                case "light":
+                    FlatLightLaf.setup();
+                    break;
+                default:
+                    FlatLightLaf.setup();
+                    break;
+            }
+            
+            // Update all windows' look-and-feel
+            for (Window window : Window.getWindows()) {
+                SwingUtilities.updateComponentTreeUI(window);
+            }
+    
+            // Apply custom syntax theme to RSyntaxTextArea components after UI update
+            for (Window window : Window.getWindows()) {
+                applyCustomSyntaxTheme(window);
             }
         });
-    }
-    
-    private static void updateTheme(String theme) {
-        switch (theme) {
-            case "darcula":
-                LafManager.setTheme(new DarculaTheme());
-                break;
-            case "intellij":
-                LafManager.setTheme(new IntelliJTheme());
-                break;
-            case "solarized-light":
-                LafManager.setTheme(new SolarizedLightTheme());
-                break;
-            case "solarized-dark":
-                LafManager.setTheme(new SolarizedDarkTheme());
-                break;
-            default:
-                LafManager.setTheme(new DarculaTheme());
-                break;
-        }
-        LafManager.install();
-        
-        // Update all windows
-        for (Window window : Window.getWindows()) {
-            SwingUtilities.updateComponentTreeUI(window);
+    }    
+
+    // Add this helper method
+    private static void applyCustomSyntaxTheme(Window window) {
+        if (window instanceof JFrame || window instanceof JDialog) {
+            for (Component comp : getAllComponents((Container)window)) {
+                if (comp instanceof RSyntaxTextArea) {
+                    SyntaxUtility.applyCustomTheme((RSyntaxTextArea)comp);
+                }
+            }
         }
     }
-    
+
+    // Add this utility method to get all components recursively
+    private static List<Component> getAllComponents(Container container) {
+        List<Component> components = new ArrayList<>();
+        for (Component comp : container.getComponents()) {
+            components.add(comp);
+            if (comp instanceof Container) {
+                components.addAll(getAllComponents((Container)comp));
+            }
+        }
+        return components;
+    }
+
     //TODO add full functionality
     private static void showOpenDialog() {
         // Placeholder for the "Open" action
@@ -254,7 +180,7 @@ public class Malimite {
         // Set up file listeners
         setupDragAndDrop(filePathText, statusLabel);
         setupFileButtonListener(fileButton, filePathText);
-        setupAnalyzeButtonListener(analyzeButton, filePathText, statusLabel, frame, config);
+        setupAnalyzeButtonListener(analyzeButton, filePathText, statusLabel, config);
     }
 
     private static void setupDragAndDrop(JTextField filePathText, JLabel statusLabel) {
@@ -289,42 +215,15 @@ public class Malimite {
         });
     }
 
-    private static void setupAnalyzeButtonListener(JButton analyzeButton, JTextField filePathText, JLabel statusLabel, JFrame frame, Config config) {
+    private static void setupAnalyzeButtonListener(JButton analyzeButton, JTextField filePathText, JLabel statusLabel, Config config) {
         analyzeButton.addActionListener(e -> {
             String filePath = filePathText.getText();
             if (!filePath.isEmpty() && Files.exists(Paths.get(filePath))) {
-                // Trigger AnalysisWindow
-                AnalysisWindow.show(frame, new File(filePath), config);
+                // Trigger AnalysisWindow with the updated method call
+                AnalysisWindow.show(new File(filePath), config);
             } else {
                 statusLabel.setText("Please select a valid file path.");
             }
         });
-    }
-
-    // Add this new helper method
-    private static void safeMenuAction(Runnable action) {
-        synchronized (menuLock) {
-            if (menuActionInProgress) {
-                return;
-            }
-            menuActionInProgress = true;
-        }
-        
-        try {
-            SwingUtilities.invokeLater(() -> {
-                try {
-                    action.run();
-                } finally {
-                    synchronized (menuLock) {
-                        menuActionInProgress = false;
-                    }
-                }
-            });
-        } catch (Exception ex) {
-            synchronized (menuLock) {
-                menuActionInProgress = false;
-            }
-            LOGGER.severe("Error in menu action: " + ex.getMessage());
-        }
-    }
+    }    
 }

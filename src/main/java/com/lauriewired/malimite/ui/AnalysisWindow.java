@@ -1,27 +1,14 @@
 package com.lauriewired.malimite.ui;
 
-import javax.swing.BorderFactory;
-import javax.swing.BoxLayout;
-import javax.swing.JComboBox;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTextArea;
-import javax.swing.JTree;
+import javax.swing.*;
+import javax.swing.event.TreeSelectionEvent;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
-import javax.swing.event.TreeSelectionEvent;
-
-import java.awt.BorderLayout;
+import java.awt.*;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +16,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rtextarea.RTextScrollPane;
 
 import com.lauriewired.malimite.configuration.Config;
 import com.lauriewired.malimite.database.SQLiteDBHandler;
@@ -42,8 +33,9 @@ import com.lauriewired.malimite.utils.PlistUtils;
 public class AnalysisWindow {
     private static final Logger LOGGER = Logger.getLogger(AnalysisWindow.class.getName());
 
+    private static JFrame analysisFrame;  // Singleton instance
     private static JLabel fileNameLabel;
-    private static JTextArea fileContentArea;
+    private static RSyntaxTextArea fileContentArea;
     private static DefaultTreeModel treeModel;
     private static JTree fileTree;
     private static Map<String, String> fileEntriesMap;
@@ -57,62 +49,84 @@ public class AnalysisWindow {
     private static Macho projectMacho;
     private static Config config;
 
-    public static void show(JFrame frame, File file, Config config) {
-        // Store config in the static field
-        AnalysisWindow.config = config;
-        frame.setTitle("Malimite - Analysis");
-        frame.setExtendedState(JFrame.MAXIMIZED_BOTH);  // Maximize the window
-        frame.setVisible(true);
+    public static void show(File file, Config config) {
+        SafeMenuAction.execute(() -> {
+            if (analysisFrame != null && analysisFrame.isVisible()) {
+                analysisFrame.toFront();
+                return;
+            }
 
-        currentFilePath = file.getAbsolutePath();
-        fileEntriesMap = new HashMap<>();
+            AnalysisWindow.config = config;
+            analysisFrame = new JFrame("Malimite - Analysis");
+            analysisFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            analysisFrame.setSize(800, 600);
+            analysisFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
 
-        // Set up UI elements
-        JPanel contentPanel = setupUIComponents();
-        
-        frame.getContentPane().removeAll(); // Clear previous components
-        frame.getContentPane().add(contentPanel, BorderLayout.CENTER);
+            currentFilePath = file.getAbsolutePath();
+            fileEntriesMap = new HashMap<>();
 
-        // Get the root nodes from the tree model
-        DefaultMutableTreeNode hiddenRoot = (DefaultMutableTreeNode) treeModel.getRoot();
-        DefaultMutableTreeNode classesRootNode = (DefaultMutableTreeNode) hiddenRoot.getChildAt(0);
-        DefaultMutableTreeNode filesRootNode = (DefaultMutableTreeNode) hiddenRoot.getChildAt(1);
+            JPanel contentPanel = setupUIComponents();
+            analysisFrame.getContentPane().add(contentPanel, BorderLayout.CENTER);
 
-        // Load and analyze file
-        loadAndAnalyzeFile(file, filesRootNode, classesRootNode);
+            DefaultMutableTreeNode hiddenRoot = (DefaultMutableTreeNode) treeModel.getRoot();
+            DefaultMutableTreeNode classesRootNode = (DefaultMutableTreeNode) hiddenRoot.getChildAt(0);
+            DefaultMutableTreeNode filesRootNode = (DefaultMutableTreeNode) hiddenRoot.getChildAt(1);
 
-        frame.revalidate();
-        frame.repaint();
+            loadAndAnalyzeFile(file, filesRootNode, classesRootNode);
+
+            analysisFrame.setVisible(true);
+
+            analysisFrame.addWindowListener(new java.awt.event.WindowAdapter() {
+                @Override
+                public void windowClosing(java.awt.event.WindowEvent e) {
+                    analysisFrame = null;
+                }
+            });
+
+            ApplicationMenu applicationMenu = new ApplicationMenu(
+                analysisFrame, 
+                fileTree,
+                config
+            );
+            analysisFrame.setJMenuBar(applicationMenu.createMenuBar());
+        });
     }
 
     private static JPanel setupUIComponents() {
         fileNameLabel = new JLabel("Analyzing " + currentFilePath);
         fileNameLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-
+    
         DefaultMutableTreeNode hiddenRootNode = new DefaultMutableTreeNode("Hidden");
         treeModel = new DefaultTreeModel(hiddenRootNode);
         DefaultMutableTreeNode classesRootNode = new DefaultMutableTreeNode("Classes");
         DefaultMutableTreeNode filesRootNode = new DefaultMutableTreeNode("Files");
         hiddenRootNode.add(classesRootNode);
         hiddenRootNode.add(filesRootNode);
-
+    
         fileTree = new JTree(treeModel);
         fileTree.setRootVisible(false);
         fileTree.addTreeSelectionListener(AnalysisWindow::displaySelectedFileContent);
         JScrollPane treeScrollPane = new JScrollPane(fileTree);
-
-        fileContentArea = new JTextArea();
+    
+        // Initialize RSyntaxTextArea with syntax highlighting
+        fileContentArea = new RSyntaxTextArea();
         fileContentArea.setEditable(false);
-        JScrollPane contentScrollPane = new JScrollPane(fileContentArea);
+        fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
+        fileContentArea.setCodeFoldingEnabled(true);
 
+        SyntaxUtility.applyCustomTheme(fileContentArea);
+    
+        // Add RSyntaxTextArea to RTextScrollPane
+        RTextScrollPane contentScrollPane = new RTextScrollPane(fileContentArea);
+    
         JPanel leftPanel = new JPanel();
         leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
         leftPanel.add(fileNameLabel);
         leftPanel.add(treeScrollPane);
-
+    
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, contentScrollPane);
         splitPane.setDividerLocation(300);
-
+    
         JPanel contentPanel = new JPanel(new BorderLayout());
         contentPanel.add(splitPane, BorderLayout.CENTER);
         return contentPanel;
@@ -315,5 +329,9 @@ public class AnalysisWindow {
             LOGGER.log(Level.SEVERE, "Error displaying decompilation for " + className, ex);
             fileContentArea.setText("Error loading decompilation for " + className);
         }
+    }
+
+    public static void safeMenuAction(Runnable action) {
+        SafeMenuAction.execute(action);
     }
 }

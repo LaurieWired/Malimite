@@ -10,6 +10,7 @@ public class Config {
     private static final String CONFIG_FILE = "malimite.properties";
     private static final String GHIDRA_PATH_KEY = "ghidra.path";
     private static final String THEME_KEY = "app.theme";
+    private static final String OS_TYPE_KEY = "os.type";
     
     private String osType;
     private String ghidraPath;
@@ -21,27 +22,30 @@ public class Config {
         this.properties = new Properties();
         loadConfig();
         
+        properties.setProperty(OS_TYPE_KEY, this.osType);
+        
         if (this.theme == null) {
-            this.theme = "darcula";
+            this.theme = "dark";
             properties.setProperty(THEME_KEY, this.theme);
             saveConfig();
         }
     }
 
-    private void loadConfig() {
+    public void loadConfig() {
         File configFile = new File(CONFIG_FILE);
         if (configFile.exists()) {
             try (FileInputStream fis = new FileInputStream(configFile)) {
                 properties.load(fis);
                 this.ghidraPath = properties.getProperty(GHIDRA_PATH_KEY);
                 this.theme = properties.getProperty(THEME_KEY);
+                this.osType = properties.getProperty(OS_TYPE_KEY, System.getProperty("os.name").toLowerCase());
             } catch (IOException e) {
                 LOGGER.log(Level.WARNING, "Failed to load configuration file", e);
             }
         }
     }
 
-    private void saveConfig() {
+    public void saveConfig() {
         try (FileOutputStream fos = new FileOutputStream(CONFIG_FILE)) {
             properties.store(fos, "Malimite Configuration");
         } catch (IOException e) {
