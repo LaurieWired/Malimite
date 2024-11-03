@@ -111,9 +111,10 @@ public class GhidraProject {
                 for (int i = 0; i < functionData.length(); i++) {
                     JSONObject functionObj = functionData.getJSONObject(i);
                     String className = functionObj.getString("ClassName");
+                    String functionName = functionObj.getString("FunctionName");
                     String decompiledCode = functionObj.getString("DecompiledCode");
-                    LOGGER.info("Updating class: " + className + " with decompiled code");
-                    dbHandler.updateClassDecompilation(className, decompiledCode);
+                    LOGGER.info("Updating function: " + functionName + " in class: " + className + " with decompiled code");
+                    dbHandler.updateFunctionDecompilation(functionName, className, decompiledCode);
                 }
                 LOGGER.info("Finished processing all data");
             }

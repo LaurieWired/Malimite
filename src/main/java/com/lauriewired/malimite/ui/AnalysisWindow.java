@@ -49,6 +49,11 @@ public class AnalysisWindow {
     private static Macho projectMacho;
     private static Config config;
 
+    private static JSplitPane mainSplitPane;
+    private static JPanel functionAssistPanel;
+    private static boolean functionAssistVisible = false;
+    private static JLabel bundleIdValue;
+
     public static void show(File file, Config config) {
         SafeMenuAction.execute(() -> {
             if (analysisFrame != null && analysisFrame.isVisible()) {
@@ -113,7 +118,7 @@ public class AnalysisWindow {
         fileContentArea.setEditable(false);
         fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
         fileContentArea.setCodeFoldingEnabled(true);
-
+    
         SyntaxUtility.applyCustomTheme(fileContentArea);
     
         // Add RSyntaxTextArea to RTextScrollPane
@@ -124,50 +129,59 @@ public class AnalysisWindow {
         infoDisplay.setContentType("text/html");
         infoDisplay.setEditable(false);
         infoDisplay.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
-        
-        // Create a scroll pane for the info display
+    
         JScrollPane infoScrollPane = new JScrollPane(infoDisplay);
         infoScrollPane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-
-        // Create left panel with vertical split
+    
         JPanel leftPanel = new JPanel(new BorderLayout());
-        
-        // Create a panel for the tree
+    
         JPanel treePanel = new JPanel(new BorderLayout());
         treePanel.add(fileNameLabel, BorderLayout.NORTH);
         treePanel.add(treeScrollPane, BorderLayout.CENTER);
-        
-        // Create vertical split pane for tree and info
+    
         JSplitPane leftSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, treePanel, infoScrollPane);
-        leftSplitPane.setResizeWeight(0.7); // This will give 70% to tree by default
-        
-        // Add the split pane to left panel
+        leftSplitPane.setResizeWeight(0.7);
+    
         leftPanel.add(leftSplitPane, BorderLayout.CENTER);
-
-        // Create bundle identifier panel (updated)
+    
+        // Initialize bundleIdValue as a class-level variable
+        bundleIdValue = new JLabel("Loading...", SwingConstants.CENTER);
+        bundleIdValue.setFont(bundleIdValue.getFont().deriveFont(Font.BOLD));
+    
         JPanel bundleIdPanel = new JPanel(new BorderLayout());
         bundleIdPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        JLabel bundleIdValue = new JLabel("Loading...", SwingConstants.CENTER);
-        bundleIdValue.setFont(bundleIdValue.getFont().deriveFont(Font.BOLD));
         bundleIdPanel.add(bundleIdValue, BorderLayout.CENTER);
-
+    
         // Create right panel to hold bundle ID and content
         JPanel rightPanel = new JPanel(new BorderLayout());
         rightPanel.add(bundleIdPanel, BorderLayout.NORTH);
         rightPanel.add(contentScrollPane, BorderLayout.CENTER);
-
-        // Update the split pane to use the right panel instead of just contentScrollPane
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightPanel);
+    
+        // Create function assist panel
+        functionAssistPanel = new JPanel(new BorderLayout());
+        functionAssistPanel.setPreferredSize(new Dimension(300, 0));
+        functionAssistPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        JLabel assistLabel = new JLabel("Function Assist");
+        assistLabel.setFont(assistLabel.getFont().deriveFont(Font.BOLD));
+        assistLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
+        functionAssistPanel.add(assistLabel, BorderLayout.NORTH);
+    
+        // Add functionAssistPanel to the right of rightPanel using a split pane
+        JSplitPane rightSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, rightPanel, functionAssistPanel);
+        rightSplitPane.setDividerLocation(600); // Adjust based on your layout preference
+        rightSplitPane.setResizeWeight(1.0);
+    
+        // Combine left and right panels
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightSplitPane);
         splitPane.setDividerLocation(300);
-
-        // Update the file info display
+    
         updateFileInfo(new File(currentFilePath), infoDisplay);
-
+    
         JPanel contentPanel = new JPanel(new BorderLayout());
         contentPanel.add(splitPane, BorderLayout.CENTER);
         analysisFrame.getContentPane().add(contentPanel, BorderLayout.CENTER);
         return contentPanel;
-    }
+    }    
 
     private static void updateFileInfo(File file, JTextPane infoDisplay) {
         Project project = new Project();
@@ -405,9 +419,29 @@ public class AnalysisWindow {
 
     private static void displayClassDecompilation(String className) {
         try {
-            String decompiledCode = dbHandler.getClassDecompilation(className);
-            if (decompiledCode != null && !decompiledCode.isEmpty()) {
-                fileContentArea.setText(decompiledCode);
+            // Get all functions for this class from the map we already have
+            Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
+            List<String> functions = classesAndFunctions.get(className);
+            
+            if (functions == null || functions.isEmpty()) {
+                fileContentArea.setText("No functions found for " + className);
+                return;
+            }
+
+            // Build the complete decompilation by combining all function decompilations
+            StringBuilder fullDecompilation = new StringBuilder();
+            fullDecompilation.append("// Class: ").append(className).append("\n\n");
+
+            for (String functionName : functions) {
+                String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className);
+                if (functionDecompilation != null && !functionDecompilation.isEmpty()) {
+                    fullDecompilation.append("// Function: ").append(functionName).append("\n");
+                    fullDecompilation.append(functionDecompilation).append("\n\n");
+                }
+            }
+
+            if (fullDecompilation.length() > 0) {
+                fileContentArea.setText(fullDecompilation.toString());
                 fileContentArea.setCaretPosition(0);
             } else {
                 fileContentArea.setText("No decompilation available for " + className);
@@ -421,26 +455,28 @@ public class AnalysisWindow {
     public static void safeMenuAction(Runnable action) {
         SafeMenuAction.execute(action);
     }
-    // Add method to update bundle ID display (simplified)
+
     private static void updateBundleIdDisplay(String bundleId) {
+        System.out.println("Updating bundle ID display to: " + bundleId);
         SwingUtilities.invokeLater(() -> {
-            Container contentPane = analysisFrame.getContentPane();
-            Component mainPanel = contentPane.getComponent(0);
-            if (mainPanel instanceof JPanel) {
-                JSplitPane splitPane = (JSplitPane) ((JPanel)mainPanel).getComponent(0);
-                Component rightComp = splitPane.getRightComponent();
-                if (rightComp instanceof JPanel) {
-                    JPanel rightPanel = (JPanel)rightComp;
-                    Component bundlePanel = rightPanel.getComponent(0);
-                    if (bundlePanel instanceof JPanel) {
-                        JPanel bundleIdPanel = (JPanel)bundlePanel;
-                        Component valueLabel = bundleIdPanel.getComponent(0);
-                        if (valueLabel instanceof JLabel) {
-                            ((JLabel)valueLabel).setText(bundleId != null ? bundleId : "N/A");
-                        }
-                    }
-                }
+            if (bundleIdValue != null) {
+                System.out.println("inside if statement");
+                bundleIdValue.setText(bundleId != null ? bundleId : "N/A");
             }
+        });
+    }    
+
+    public static void toggleFunctionAssist() {
+        SafeMenuAction.execute(() -> {
+            functionAssistVisible = !functionAssistVisible;
+            functionAssistPanel.setVisible(functionAssistVisible);
+            
+            if (functionAssistVisible) {
+                mainSplitPane.setDividerLocation(mainSplitPane.getWidth() - functionAssistPanel.getPreferredSize().width);
+            }
+            
+            mainSplitPane.revalidate();
+            mainSplitPane.repaint();
         });
     }
 }

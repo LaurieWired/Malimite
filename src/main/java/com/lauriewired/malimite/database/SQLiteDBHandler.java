@@ -38,18 +38,16 @@ public class SQLiteDBHandler {
         String sqlClasses = "CREATE TABLE IF NOT EXISTS Classes ("
                 + "ClassName TEXT PRIMARY KEY,"
                 + "ClassFileName TEXT,"
-                + "Functions TEXT,"
-                + "DecompilationCode TEXT);";  // Application file format
+                + "Functions TEXT);";  // Removed DecompilationCode from Classes
 
         String sqlFunctions = "CREATE TABLE IF NOT EXISTS Functions ("
-                + "FunctionName TEXT PRIMARY KEY,"
-                + "ClassFileName TEXT,"
+                + "FunctionName TEXT,"
                 + "ParentClass TEXT,"
-                + "DecompilationLine INTEGER);";
+                + "DecompilationCode TEXT,"
+                + "PRIMARY KEY (FunctionName, ParentClass));";  // Composite key to allow same function name in different classes
 
         try (Connection conn = DriverManager.getConnection(url);
              Statement stmt = conn.createStatement()) {
-            // Create tables
             stmt.execute(sqlClasses);
             stmt.execute(sqlFunctions);
         } catch (SQLException e) {
@@ -120,7 +118,7 @@ public class SQLiteDBHandler {
     public void insertFunction(String functionName, String parentClass, String decompiledCode) {
         String sql = "INSERT INTO Functions(FunctionName, ParentClass, DecompilationCode) "
                    + "VALUES(?,?,?) "
-                   + "ON CONFLICT(FunctionName) "
+                   + "ON CONFLICT(FunctionName, ParentClass) "
                    + "DO UPDATE SET DecompilationCode = ?";
 
         try (Connection conn = DriverManager.getConnection(url);
@@ -128,7 +126,7 @@ public class SQLiteDBHandler {
             pstmt.setString(1, functionName);
             pstmt.setString(2, parentClass);
             pstmt.setString(3, decompiledCode);
-            pstmt.setString(4, decompiledCode);  // Value for UPDATE case
+            pstmt.setString(4, decompiledCode);
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
@@ -174,7 +172,7 @@ public class SQLiteDBHandler {
     }
 
     public void insertClass(String className, String functions) {
-        String sql = "INSERT INTO Classes(ClassName, Functions, ClassFileName, DecompilationCode) VALUES(?,?,NULL,NULL)";
+        String sql = "INSERT INTO Classes(ClassName, Functions, ClassFileName) VALUES(?,?,NULL)";
 
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -211,33 +209,38 @@ public class SQLiteDBHandler {
             while (rs.next()) {
                 System.out.println(rs.getString("ClassFileName") + "\t" +
                                    rs.getString("ClassName") + "\t" +
-                                   rs.getString("Functions") + "\t" +
-                                   rs.getString("DecompilationCode"));
+                                   rs.getString("Functions"));
             }
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
     }
 
-    public void updateClassDecompilation(String className, String decompiledCode) {
-        String sql = "UPDATE Classes SET DecompilationCode = ? WHERE ClassName = ?";
+    public void updateFunctionDecompilation(String functionName, String className, String decompiledCode) {
+        String sql = "INSERT INTO Functions(FunctionName, ParentClass, DecompilationCode) "
+                   + "VALUES(?, ?, ?) "
+                   + "ON CONFLICT(FunctionName, ParentClass) "
+                   + "DO UPDATE SET DecompilationCode = ?";
 
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, decompiledCode);
+            pstmt.setString(1, functionName);
             pstmt.setString(2, className);
+            pstmt.setString(3, decompiledCode);
+            pstmt.setString(4, decompiledCode);
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
     }
 
-    public String getClassDecompilation(String className) {
-        String sql = "SELECT DecompilationCode FROM Classes WHERE ClassName = ?";
+    public String getFunctionDecompilation(String functionName, String className) {
+        String sql = "SELECT DecompilationCode FROM Functions WHERE FunctionName = ? AND ParentClass = ?";
         
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, className);
+            pstmt.setString(1, functionName);
+            pstmt.setString(2, className);
             
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
