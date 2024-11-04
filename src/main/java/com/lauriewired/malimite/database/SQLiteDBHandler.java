@@ -228,9 +228,25 @@ public class SQLiteDBHandler {
             pstmt.setString(2, className);
             pstmt.setString(3, decompiledCode);
             pstmt.setString(4, decompiledCode);
-            pstmt.executeUpdate();
+            int rowsAffected = pstmt.executeUpdate();
+            System.out.println("Database update for " + functionName + " affected " + rowsAffected + " rows");
+            
+            // Verify the update
+            String verifySQL = "SELECT DecompilationCode FROM Functions WHERE FunctionName = ? AND ParentClass = ?";
+            try (PreparedStatement verifyStmt = conn.prepareStatement(verifySQL)) {
+                verifyStmt.setString(1, functionName);
+                verifyStmt.setString(2, className);
+                try (ResultSet rs = verifyStmt.executeQuery()) {
+                    if (rs.next()) {
+                        String storedCode = rs.getString("DecompilationCode");
+                        System.out.println("Verification - Stored code matches input: " + 
+                            storedCode.equals(decompiledCode));
+                    }
+                }
+            }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            System.err.println("Error updating function decompilation: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

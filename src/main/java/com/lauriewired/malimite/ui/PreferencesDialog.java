@@ -54,24 +54,34 @@ public class PreferencesDialog {
         // Add some vertical spacing
         mainPanel.add(Box.createVerticalStrut(10));
 
+        // Add OpenAI API Key field
+        JPanel openaiPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        openaiPanel.add(new JLabel("OpenAI API Key:"));
+        JPasswordField openaiKeyField = new JPasswordField(config.getOpenAIApiKey(), 30);
+        openaiPanel.add(openaiKeyField);
+        mainPanel.add(openaiPanel);
+
+        // Add Claude API Key field
+        JPanel claudePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        claudePanel.add(new JLabel("Claude API Key:"));
+        JPasswordField claudeKeyField = new JPasswordField(config.getClaudeApiKey(), 30);
+        claudePanel.add(claudeKeyField);
+        mainPanel.add(claudePanel);
+
+        // Add some vertical spacing
+        mainPanel.add(Box.createVerticalStrut(10));
+
         // Buttons panel
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton saveButton = new JButton("Save");
         JButton cancelButton = new JButton("Cancel");
 
         saveButton.addActionListener(e -> {
-            String oldTheme = config.getTheme();
-            String newTheme = (String) themeComboBox.getSelectedItem();
-        
-            config.setTheme(newTheme);
+            config.setTheme((String) themeComboBox.getSelectedItem());
             config.setGhidraPath(ghidraPathField.getText());
+            config.setOpenAIApiKey(new String(openaiKeyField.getPassword()));
+            config.setClaudeApiKey(new String(claudeKeyField.getPassword()));
             config.saveConfig();
-        
-            // Apply theme change immediately if it changed
-            if (!oldTheme.equals(newTheme)) {
-                SwingUtilities.invokeLater(() -> Malimite.updateTheme(newTheme));
-            }
-        
             dialog.dispose();
         });        
 

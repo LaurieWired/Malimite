@@ -11,6 +11,9 @@ public class Config {
     private static final String GHIDRA_PATH_KEY = "ghidra.path";
     private static final String THEME_KEY = "app.theme";
     private static final String OS_TYPE_KEY = "os.type";
+    private static final String OPENAI_API_KEY = "openai.api.key";
+    private static final String CLAUDE_API_KEY = "claude.api.key";
+    private static final String LOCAL_MODEL_URL = "local.model.url";
     
     private String osType;
     private String ghidraPath;
@@ -90,5 +93,32 @@ public class Config {
 
     public String getConfigDirectory() {
         return configDirectory;
+    }
+
+    public String getOpenAIApiKey() {
+        return properties.getProperty(OPENAI_API_KEY, "");
+    }
+
+    public void setOpenAIApiKey(String key) {
+        properties.setProperty(OPENAI_API_KEY, key);
+        saveConfig();
+    }
+
+    public String getClaudeApiKey() {
+        return properties.getProperty(CLAUDE_API_KEY, "");
+    }
+
+    public void setClaudeApiKey(String key) {
+        properties.setProperty(CLAUDE_API_KEY, key);
+        saveConfig();
+    }
+
+    public String getLocalModelUrl() {
+        return properties.getProperty(LOCAL_MODEL_URL, "http://localhost:5000/api/inference");
+    }
+
+    public void setLocalModelUrl(String url) {
+        properties.setProperty(LOCAL_MODEL_URL, url);
+        saveConfig();
     }
 }

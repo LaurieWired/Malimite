@@ -16,6 +16,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.awt.event.MouseEvent;
 
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
@@ -30,6 +31,10 @@ import com.lauriewired.malimite.utils.FileProcessing;
 import com.lauriewired.malimite.utils.NodeOperations;
 import com.lauriewired.malimite.utils.PlistUtils;
 import com.lauriewired.malimite.configuration.Project;
+import com.lauriewired.malimite.tools.AIBackend;
+import com.lauriewired.malimite.tools.AIBackend.Model;
+import java.util.Arrays;
+
 public class AnalysisWindow {
     private static final Logger LOGGER = Logger.getLogger(AnalysisWindow.class.getName());
 
@@ -53,6 +58,10 @@ public class AnalysisWindow {
     private static JPanel functionAssistPanel;
     private static boolean functionAssistVisible = false;
     private static JLabel bundleIdValue;
+    private static JLabel closeLabel;
+
+    private static JButton saveButton;
+    private static boolean isEditing = false;
 
     public static void show(File file, Config config) {
         SafeMenuAction.execute(() -> {
@@ -157,31 +166,224 @@ public class AnalysisWindow {
         rightPanel.add(bundleIdPanel, BorderLayout.NORTH);
         rightPanel.add(contentScrollPane, BorderLayout.CENTER);
     
-        // Create function assist panel
+        // Create function assist panel with close label
         functionAssistPanel = new JPanel(new BorderLayout());
         functionAssistPanel.setPreferredSize(new Dimension(300, 0));
         functionAssistPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        JLabel assistLabel = new JLabel("Function Assist");
+        
+        // Create header panel to hold both label and close label
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        JLabel assistLabel = new JLabel("Function Assist", SwingConstants.CENTER);
         assistLabel.setFont(assistLabel.getFont().deriveFont(Font.BOLD));
         assistLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
-        functionAssistPanel.add(assistLabel, BorderLayout.NORTH);
-    
+        
+        // Create close label
+        closeLabel = new JLabel("✕");  // Using "✕" as the close symbol
+        closeLabel.setFont(closeLabel.getFont().deriveFont(14.0f));
+        closeLabel.setBorder(BorderFactory.createEmptyBorder(0, 5, 10, 5));
+        closeLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        closeLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                toggleFunctionAssist();
+            }
+        });
+        
+        headerPanel.add(assistLabel, BorderLayout.CENTER);
+        headerPanel.add(closeLabel, BorderLayout.EAST);
+        functionAssistPanel.add(headerPanel, BorderLayout.NORTH);
+
+        // Add function selection panel
+        JPanel selectionPanel = new JPanel(new BorderLayout());
+        DefaultListModel<String> functionListModel = new DefaultListModel<>();
+        JList<String> functionList = new JList<>(functionListModel);
+        functionList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+
+        // Add "Select All" checkbox
+        JCheckBox selectAllBox = new JCheckBox("Select All");
+        selectAllBox.addActionListener(e -> {
+            if (selectAllBox.isSelected()) {
+                functionList.setSelectionInterval(0, functionListModel.getSize() - 1);
+            } else {
+                functionList.clearSelection();
+            }
+        });
+
+        // Add scroll pane for function list
+        JScrollPane listScrollPane = new JScrollPane(functionList);
+        
+        selectionPanel.add(selectAllBox, BorderLayout.NORTH);
+        selectionPanel.add(listScrollPane, BorderLayout.CENTER);
+        
+        // Create model selector
+        Model[] models = AIBackend.getSupportedModels();
+        String[] modelNames = Arrays.stream(models)
+            .map(Model::getDisplayName)
+            .toArray(String[]::new);
+        JComboBox<String> modelSelector = new JComboBox<>(modelNames);
+        
+        // Update bottom panel to include both clean button and model selector
+        JPanel bottomPanel = new JPanel(new BorderLayout());
+        bottomPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        
+        JPanel modelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        modelPanel.add(new JLabel("Model:"));
+        modelPanel.add(modelSelector);
+        
+        // Add this before creating the buttonPanel
+        JButton cleanButton = new JButton("Auto Fix");
+        
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttonPanel.add(cleanButton);
+        
+        bottomPanel.add(modelPanel, BorderLayout.WEST);
+        bottomPanel.add(buttonPanel, BorderLayout.EAST);
+        
+        // Update clean button action listener
+        cleanButton.addActionListener(e -> {
+            String selectedDisplayName = modelSelector.getSelectedItem().toString();
+            Model selectedModel = Arrays.stream(AIBackend.getSupportedModels())
+                .filter(m -> m.getDisplayName().equals(selectedDisplayName))
+                .findFirst()
+                .orElse(AIBackend.getDefaultModel());
+            
+            // Get selected functions from the list
+            List<String> selectedFunctions = ((JList<String>) listScrollPane.getViewport().getView()).getSelectedValuesList();
+            
+            if (selectedFunctions.isEmpty()) {
+                JOptionPane.showMessageDialog(analysisFrame,
+                    "Please select at least one function to process.",
+                    "No Selection",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // Get the parent class name from the tree selection
+            TreePath path = fileTree.getSelectionPath();
+            if (path == null) {
+                JOptionPane.showMessageDialog(analysisFrame,
+                    "Please select a class in the tree view.",
+                    "No Class Selected",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            DefaultMutableTreeNode classNode = (DefaultMutableTreeNode) path.getPathComponent(2);
+            String className = classNode.getUserObject().toString();
+
+            // Build the complete prompt
+            StringBuilder fullPrompt = new StringBuilder(AIBackend.getDefaultPrompt());
+            fullPrompt.append("\n\nHere are the functions to translate:\n\n");
+            
+            for (String functionName : selectedFunctions) {
+                String decompilation = dbHandler.getFunctionDecompilation(functionName, className);
+                if (decompilation != null && !decompilation.isEmpty()) {
+                    fullPrompt.append("// Function: ").append(functionName).append("\n");
+                    fullPrompt.append(decompilation).append("\n\n");
+                }
+            }
+
+            // Create confirmation message
+            String confirmMessage = String.format(
+                "<html>Sending %d function%s to %s for translation:<br><br>%s</html>",
+                selectedFunctions.size(),
+                selectedFunctions.size() == 1 ? "" : "s",
+                selectedModel.getDisplayName(),
+                String.join(", ", selectedFunctions)
+            );
+
+            // Create custom dialog with two buttons
+            Object[] options = {"Confirm", "Edit Prompt"};
+            int choice = JOptionPane.showOptionDialog(
+                analysisFrame,
+                confirmMessage,
+                "Confirm Translation",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]
+            );
+
+            if (choice == 0) { // Confirm was clicked
+                sendPromptToAI(selectedModel, fullPrompt.toString());
+            } else if (choice == 1) { // Edit Prompt was clicked
+                showPromptEditor(selectedModel, fullPrompt.toString());
+            }
+        });
+
+        selectionPanel.add(bottomPanel, BorderLayout.SOUTH);
+        
+        functionAssistPanel.add(selectionPanel, BorderLayout.CENTER);
+
+        // Add the same click listener to the label for consistency
+        assistLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        assistLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                toggleFunctionAssist();
+            }
+        });
+
+        functionAssistPanel.setVisible(false); // Start with the panel hidden
+
         // Add functionAssistPanel to the right of rightPanel using a split pane
         JSplitPane rightSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, rightPanel, functionAssistPanel);
-        rightSplitPane.setDividerLocation(600); // Adjust based on your layout preference
+        rightSplitPane.setDividerLocation(1.0);
         rightSplitPane.setResizeWeight(1.0);
     
         // Combine left and right panels
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightSplitPane);
-        splitPane.setDividerLocation(300);
+        mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightSplitPane);
+        mainSplitPane.setDividerLocation(300);
     
         updateFileInfo(new File(currentFilePath), infoDisplay);
     
         JPanel contentPanel = new JPanel(new BorderLayout());
-        contentPanel.add(splitPane, BorderLayout.CENTER);
+        contentPanel.add(mainSplitPane, BorderLayout.CENTER);
         analysisFrame.getContentPane().add(contentPanel, BorderLayout.CENTER);
+
+        toggleFunctionAssist(); // Change my mind. Want to show it by default and this is the easiest way to do it
+
+        // Add save button (initially invisible)
+        saveButton = new JButton("Save Changes");
+        saveButton.setVisible(false);
+        saveButton.addActionListener(e -> saveCurrentFunction());
+        
+        // Add save button to the right panel, above the content
+        JPanel rightTopPanel = new JPanel(new BorderLayout());
+        rightTopPanel.add(bundleIdPanel, BorderLayout.CENTER);
+        rightTopPanel.add(saveButton, BorderLayout.EAST);
+        rightPanel.add(rightTopPanel, BorderLayout.NORTH);
+
+        // Add context menu to the tree
+        fileTree.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                maybeShowPopup(e);
+            }
+        
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                maybeShowPopup(e);
+            }
+        
+            private void maybeShowPopup(MouseEvent e) {
+                // Check for right-click or equivalent on all OSes
+                if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
+                    TreePath path = fileTree.getPathForLocation(e.getX(), e.getY());
+                    if (path != null && isInClassesTree(path) && path.getPathCount() == 4) {
+                        // Show context menu for function nodes only
+                        JPopupMenu popup = new JPopupMenu();
+                        JMenuItem editItem = new JMenuItem("Edit function");
+                        editItem.addActionListener(ev -> startEditing(path));
+                        popup.add(editItem);
+                        popup.show(fileTree, e.getX(), e.getY());
+                    }
+                }
+            }
+        });        
+
         return contentPanel;
-    }    
+    }      
 
     private static void updateFileInfo(File file, JTextPane infoDisplay) {
         Project project = new Project();
@@ -222,6 +424,29 @@ public class AnalysisWindow {
         fileContentArea.setText("");
         LOGGER.info("Beginning file unzip and analysis process");
         unzipAndLoadToTree(file, filesRootNode, classesRootNode);
+        
+        // Add this: Select Info.plist after loading
+        SwingUtilities.invokeLater(() -> {
+            DefaultMutableTreeNode plistNode = findInfoPlistNode(filesRootNode);
+            if (plistNode != null) {
+                TreePath path = new TreePath(plistNode.getPath());
+                fileTree.setSelectionPath(path);
+                fileTree.scrollPathToVisible(path);
+            }
+        });
+    }
+
+    private static DefaultMutableTreeNode findInfoPlistNode(DefaultMutableTreeNode root) {
+        for (int i = 0; i < root.getChildCount(); i++) {
+            DefaultMutableTreeNode appNode = (DefaultMutableTreeNode) root.getChildAt(i);
+            for (int j = 0; j < appNode.getChildCount(); j++) {
+                DefaultMutableTreeNode child = (DefaultMutableTreeNode) appNode.getChildAt(j);
+                if (child.getUserObject().toString().equals("Info.plist")) {
+                    return child;
+                }
+            }
+        }
+        return null;
     }
 
     private static void unzipAndLoadToTree(File fileToUnzip, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
@@ -358,11 +583,18 @@ public class AnalysisWindow {
     }
 
     private static void displaySelectedFileContent(TreeSelectionEvent e) {
+        // Don't change content if we're currently editing
+        if (isEditing) {
+            return;
+        }
+
         TreePath path = e.getPath();
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
     
         // Check if we're in the Classes root
         if (isInClassesTree(path)) {
+            fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
+            
             // If this is a class node (direct child of "Classes" node)
             if (path.getPathCount() == 3) {
                 String className = node.getUserObject().toString();
@@ -373,12 +605,13 @@ public class AnalysisWindow {
             else if (path.getPathCount() == 4) {
                 DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) node.getParent();
                 String className = parentNode.getUserObject().toString();
-                displayClassDecompilation(className);
+                String functionName = node.getUserObject().toString();
+                displayFunctionDecompilation(functionName, className);
                 return;
             }
         }
 
-        // Original file content display logic for the Files tree
+        // Build the full path
         StringBuilder fullPath = new StringBuilder();
         for (int i = 1; i < path.getPathCount(); i++) {
             if (fullPath.length() > 0 && fullPath.charAt(fullPath.length() - 1) != '/') {
@@ -387,19 +620,28 @@ public class AnalysisWindow {
             fullPath.append(((DefaultMutableTreeNode) path.getPathComponent(i)).getUserObject().toString());
         }
 
-        //System.out.println("fileEntriesMap.get(fullPath.toString()): " + fileEntriesMap.get(fullPath.toString()));
-        //System.out.println("fullPath: " + fullPath);
+        // Only proceed if this path exists in our fileEntriesMap (meaning it's a file, not a directory)
+        String entryPath = fileEntriesMap.get(fullPath.toString());
+        if (entryPath == null) {
+            return; // Exit if this is a directory or non-existent path
+        }
 
         if (currentFilePath != null) {
             try {
-                byte[] contentBytes = FileProcessing.readContentFromZip(currentFilePath, fileEntriesMap.get(fullPath.toString()));
+                byte[] contentBytes = FileProcessing.readContentFromZip(currentFilePath, entryPath);
                 String contentText;
         
-                // Decode if it's a binary plist. Otherwise, just print the text
-                if (fullPath.toString().endsWith("plist") && PlistUtils.isBinaryPlist(contentBytes)) {
-                    System.out.println("Handling binary property list");
-                    contentText = PlistUtils.decodeBinaryPropertyList(contentBytes);
+                // Set appropriate syntax style based on file type
+                if (fullPath.toString().endsWith("plist")) {
+                    fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JSON);
+                    if (PlistUtils.isBinaryPlist(contentBytes)) {
+                        contentText = PlistUtils.decodeBinaryPropertyList(contentBytes);
+                    } else {
+                        contentText = new String(contentBytes);
+                    }
                 } else {
+                    // Reset to default C syntax for other files
+                    fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
                     contentText = new String(contentBytes);
                 }
         
@@ -411,14 +653,11 @@ public class AnalysisWindow {
         }
     }
 
-    private static boolean isInClassesTree(TreePath path) {
-        if (path.getPathCount() < 2) return false;
-        DefaultMutableTreeNode secondNode = (DefaultMutableTreeNode) path.getPathComponent(1);
-        return secondNode.getUserObject().toString().equals("Classes");
-    }
-
     private static void displayClassDecompilation(String className) {
         try {
+            // Update the function list in the function assist panel
+            updateFunctionList(className);
+            
             // Get all functions for this class from the map we already have
             Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
             List<String> functions = classesAndFunctions.get(className);
@@ -452,6 +691,29 @@ public class AnalysisWindow {
         }
     }
 
+    private static void displayFunctionDecompilation(String functionName, String className) {
+        try {
+            // Update the function list in the function assist panel
+            updateFunctionList(className);
+            
+            String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className);
+            if (functionDecompilation != null && !functionDecompilation.isEmpty()) {
+                StringBuilder content = new StringBuilder();
+                content.append("// Class: ").append(className).append("\n");
+                content.append("// Function: ").append(functionName).append("\n\n");
+                content.append(functionDecompilation);
+                
+                fileContentArea.setText(content.toString());
+                fileContentArea.setCaretPosition(0);
+            } else {
+                fileContentArea.setText("No decompilation available for function " + functionName);
+            }
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error displaying decompilation for " + functionName, ex);
+            fileContentArea.setText("Error loading decompilation for " + functionName);
+        }
+    }
+
     public static void safeMenuAction(Runnable action) {
         SafeMenuAction.execute(action);
     }
@@ -460,23 +722,314 @@ public class AnalysisWindow {
         System.out.println("Updating bundle ID display to: " + bundleId);
         SwingUtilities.invokeLater(() -> {
             if (bundleIdValue != null) {
-                System.out.println("inside if statement");
                 bundleIdValue.setText(bundleId != null ? bundleId : "N/A");
             }
         });
     }    
 
     public static void toggleFunctionAssist() {
-        SafeMenuAction.execute(() -> {
+        if (functionAssistPanel != null && mainSplitPane != null) {
             functionAssistVisible = !functionAssistVisible;
             functionAssistPanel.setVisible(functionAssistVisible);
-            
+            closeLabel.setVisible(functionAssistVisible);  // Only show X when panel is visible
+
+            // Adjust the rightSplitPane divider location based on visibility
+            JSplitPane rightSplitPane = (JSplitPane) mainSplitPane.getRightComponent();
+
             if (functionAssistVisible) {
-                mainSplitPane.setDividerLocation(mainSplitPane.getWidth() - functionAssistPanel.getPreferredSize().width);
+                rightSplitPane.setDividerLocation(rightSplitPane.getWidth() - functionAssistPanel.getPreferredSize().width);
+            } else {
+                rightSplitPane.setDividerLocation(1.0);
             }
-            
+
             mainSplitPane.revalidate();
             mainSplitPane.repaint();
-        });
+        } else {
+            System.out.println("Error: functionAssistPanel or mainSplitPane is null");
+        }
+    }
+
+    // Add this method to update the function list when a class is selected
+    private static void updateFunctionList(String className) {
+        if (functionAssistPanel != null) {
+            JList<?> functionList = (JList<?>) ((JScrollPane) ((JPanel) functionAssistPanel
+                .getComponent(1)).getComponent(1)).getViewport().getView();
+            DefaultListModel<String> model = (DefaultListModel<String>) functionList.getModel();
+            model.clear();
+            
+            // Get functions for the selected class
+            Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
+            List<String> functions = classesAndFunctions.get(className);
+            
+            if (functions != null) {
+                for (String function : functions) {
+                    model.addElement(function);
+                }
+            }
+            
+            // Reset "Select All" checkbox
+            JCheckBox selectAllBox = (JCheckBox) ((JPanel) functionAssistPanel
+                .getComponent(1)).getComponent(0);
+            selectAllBox.setSelected(false);
+        }
+    }
+
+    private static void sendPromptToAI(Model selectedModel, String prompt) {
+        // Create a loading dialog
+        JDialog loadingDialog = new JDialog(analysisFrame, "Processing", true);
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Add a spinner
+        JProgressBar spinner = new JProgressBar();
+        spinner.setIndeterminate(true);
+        panel.add(spinner, BorderLayout.CENTER);
+        
+        // Add a status label
+        JLabel statusLabel = new JLabel("Sending request to " + selectedModel.getDisplayName() + "...");
+        panel.add(statusLabel, BorderLayout.SOUTH);
+        
+        loadingDialog.add(panel);
+        loadingDialog.pack();
+        loadingDialog.setLocationRelativeTo(analysisFrame);
+        
+        // Run the AI request in a background thread
+        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                try {
+                    return AIBackend.sendToModel(
+                        selectedModel.getProvider(), 
+                        selectedModel.getModelId(), 
+                        prompt, 
+                        config
+                    );
+                } catch (IOException ex) {
+                    throw ex;
+                }
+            }
+            
+            @Override
+            protected void done() {
+                loadingDialog.dispose();
+                try {
+                    String aiResponse = get();
+                    if (aiResponse != null) {
+                        showFunctionAcceptanceDialog(aiResponse);
+                    } else {
+                        JOptionPane.showMessageDialog(analysisFrame, 
+                            "Failed to retrieve response from AI model.", 
+                            "Error", 
+                            JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(analysisFrame, 
+                        "Error connecting to AI model: " + ex.getMessage(), 
+                        "Error", 
+                        JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        };
+        
+        // Start the background task and show the loading dialog
+        worker.execute();
+        loadingDialog.setVisible(true);
+    }
+
+    private static void showPromptEditor(Model selectedModel, String prompt) {
+        // Create an editable text area for the prompt
+        JTextArea promptArea = new JTextArea(prompt);
+        promptArea.setRows(10);
+        promptArea.setColumns(50);
+        promptArea.setLineWrap(true);
+        promptArea.setWrapStyleWord(true);
+        
+        // Create a scroll pane for the text area
+        JScrollPane scrollPane = new JScrollPane(promptArea);
+        
+        // Create a panel with a descriptive label
+        JPanel promptPanel = new JPanel(new BorderLayout());
+        promptPanel.add(new JLabel("Edit prompt before sending:"), BorderLayout.NORTH);
+        promptPanel.add(scrollPane, BorderLayout.CENTER);
+        
+        // Show prompt editor
+        int confirm = JOptionPane.showConfirmDialog(analysisFrame,
+            promptPanel,
+            "Edit and Confirm Prompt",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE);
+            
+        if (confirm == JOptionPane.OK_OPTION) {
+            sendPromptToAI(selectedModel, promptArea.getText());
+        }
+    }
+
+    private static void showFunctionAcceptanceDialog(String aiResponse) {
+        String[] functions = aiResponse.split("\n\n");
+    
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        JPanel functionsPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+    
+        // Get selected function names from functionList
+        JList<String> functionList = (JList<String>) ((JScrollPane) ((JPanel) functionAssistPanel
+            .getComponent(1)).getComponent(1)).getViewport().getView();
+        List<String> selectedFunctionNames = functionList.getSelectedValuesList();
+    
+        TreePath path = fileTree.getSelectionPath();
+        if (path == null) {
+            JOptionPane.showMessageDialog(analysisFrame, 
+                "Please select a class first.", 
+                "Error", 
+                JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        String className = node.getUserObject().toString();
+    
+        // Map to track which function names the user has confirmed
+        Map<JCheckBox, String> checkboxToCodeMap = new HashMap<>();
+        Map<JCheckBox, JComboBox<String>> checkboxToFunctionDropdownMap = new HashMap<>();
+    
+        for (String function : functions) {
+            if (function.trim().isEmpty()) continue;
+    
+            // Extract or guess function name (could be refined based on the structure of AI response)
+            String inferredFunctionName = extractFunctionName(function);
+            
+            JPanel functionPanel = new JPanel(new BorderLayout());
+            functionPanel.setBorder(BorderFactory.createEtchedBorder());
+    
+            JPanel headerPanel = new JPanel(new BorderLayout());
+            JCheckBox checkbox = new JCheckBox("Replace function:");
+            
+            // Create dropdown for function name selection
+            JComboBox<String> functionDropdown = new JComboBox<>(selectedFunctionNames.toArray(new String[0]));
+            functionDropdown.setSelectedItem(inferredFunctionName != null && selectedFunctionNames.contains(inferredFunctionName) 
+                ? inferredFunctionName 
+                : selectedFunctionNames.get(0)); // Default to first option if no match
+    
+            // Display inferred function name as a label (could help user identify mismatches quickly)
+            JLabel inferredNameLabel = new JLabel("Inferred: " + (inferredFunctionName != null ? inferredFunctionName : "Unknown"));
+            headerPanel.add(checkbox, BorderLayout.WEST);
+            headerPanel.add(functionDropdown, BorderLayout.CENTER);
+            headerPanel.add(inferredNameLabel, BorderLayout.EAST);
+    
+            JTextArea codeArea = new JTextArea(function);
+            codeArea.setRows(8);
+            codeArea.setEditable(false);
+            JScrollPane scrollPane = new JScrollPane(codeArea);
+    
+            functionPanel.add(headerPanel, BorderLayout.NORTH);
+            functionPanel.add(scrollPane, BorderLayout.CENTER);
+    
+            checkboxToCodeMap.put(checkbox, function);
+            checkboxToFunctionDropdownMap.put(checkbox, functionDropdown);
+    
+            gbc.gridy++;
+            functionsPanel.add(functionPanel, gbc);
+        }
+    
+        JScrollPane mainScrollPane = new JScrollPane(functionsPanel);
+        mainScrollPane.setPreferredSize(new Dimension(800, 600));
+        mainPanel.add(mainScrollPane, BorderLayout.CENTER);
+    
+        int result = JOptionPane.showConfirmDialog(analysisFrame,
+            mainPanel,
+            "Accept or Reject Function Updates",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE);
+    
+        if (result == JOptionPane.OK_OPTION) {
+            boolean anyUpdates = false;
+            for (Map.Entry<JCheckBox, String> entry : checkboxToCodeMap.entrySet()) {
+                JCheckBox checkbox = entry.getKey();
+                if (checkbox.isSelected()) {
+                    String newCode = entry.getValue();
+                    JComboBox<String> functionDropdown = checkboxToFunctionDropdownMap.get(checkbox);
+                    String functionName = (String) functionDropdown.getSelectedItem();
+    
+                    // Update database and verify
+                    dbHandler.updateFunctionDecompilation(functionName, className, newCode);
+                    String verifyUpdate = dbHandler.getFunctionDecompilation(functionName, className);
+                    if (verifyUpdate != null && verifyUpdate.equals(newCode)) {
+                        anyUpdates = true;
+                    } else {
+                        LOGGER.warning("Failed to update function: " + functionName);
+                    }
+                }
+            }
+    
+            // Refresh display if any updates were made
+            if (anyUpdates) {
+                SwingUtilities.invokeLater(() -> displayClassDecompilation(className));
+            }
+        }
+    }
+
+    private static String extractFunctionName(String functionCode) {
+        // Basic function name extraction - you might need to make this more robust
+        try {
+            String[] lines = functionCode.split("\n");
+            for (String line : lines) {
+                line = line.trim();
+                if (line.contains("func ")) {
+                    // Extract name between "func " and "("
+                    int startIndex = line.indexOf("func ") + 5;
+                    int endIndex = line.indexOf("(");
+                    if (endIndex > startIndex) {
+                        return line.substring(startIndex, endIndex).trim();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error extracting function name", e);
+        }
+        return null;
+    }
+
+    private static boolean isInClassesTree(TreePath path) {
+        return path.getPathCount() > 1 && 
+               ((DefaultMutableTreeNode) path.getPathComponent(1)).getUserObject().toString().equals("Classes");
+    }
+
+    private static void startEditing(TreePath path) {
+        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) node.getParent();
+        String functionName = node.getUserObject().toString();
+        String className = parentNode.getUserObject().toString();
+
+        // Enable editing and show save button
+        fileContentArea.setEditable(true);
+        saveButton.setVisible(true);
+        isEditing = true;
+
+        // Store current function info for saving later
+        fileContentArea.putClientProperty("currentFunction", functionName);
+        fileContentArea.putClientProperty("currentClass", className);
+    }
+
+    private static void saveCurrentFunction() {
+        if (!isEditing) return;
+
+        String functionName = (String) fileContentArea.getClientProperty("currentFunction");
+        String className = (String) fileContentArea.getClientProperty("currentClass");
+        String newCode = fileContentArea.getText();
+
+        // Update the database
+        dbHandler.updateFunctionDecompilation(functionName, className, newCode);
+
+        // Reset editing state
+        fileContentArea.setEditable(false);
+        saveButton.setVisible(false);
+        isEditing = false;
+
+        // Refresh the display
+        displayFunctionDecompilation(functionName, className);
     }
 }

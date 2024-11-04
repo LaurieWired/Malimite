@@ -76,8 +76,10 @@ public class ApplicationMenu {
         JMenu toolsMenu = new JMenu("Tools");
         toolsMenu.setMnemonic(KeyEvent.VK_T);
 
-        addMenuItem(toolsMenu, "Function Assist", e -> 
-            AnalysisWindow.toggleFunctionAssist(),
+        addMenuItem(toolsMenu, "Function Assist", e -> {
+            System.out.println("Function Assist menu item clicked");
+            AnalysisWindow.toggleFunctionAssist();
+        },
             KeyStroke.getKeyStroke(KeyEvent.VK_L, config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
         );
 
