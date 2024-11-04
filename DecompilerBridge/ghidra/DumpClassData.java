@@ -145,6 +145,12 @@ public class DumpClassData extends GhidraScript {
         try (Socket socket = new Socket("localhost", port);
              PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
             
+            // Send immediate connection confirmation
+            out.println("CONNECTED");
+            
+            // Start the actual analysis
+            println("Beginning analysis...");
+            
             // Send class data
             out.println(classData.toString(4));
             out.println("END_CLASS_DATA");

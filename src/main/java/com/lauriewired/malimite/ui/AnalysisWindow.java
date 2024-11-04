@@ -63,6 +63,10 @@ public class AnalysisWindow {
     private static JButton saveButton;
     private static boolean isEditing = false;
 
+    private static JProgressBar processingBar;
+    private static JLabel processingLabel;
+    private static JPanel statusPanel;
+
     public static void show(File file, Config config) {
         SafeMenuAction.execute(() -> {
             if (analysisFrame != null && analysisFrame.isVisible()) {
@@ -339,7 +343,6 @@ public class AnalysisWindow {
     
         JPanel contentPanel = new JPanel(new BorderLayout());
         contentPanel.add(mainSplitPane, BorderLayout.CENTER);
-        analysisFrame.getContentPane().add(contentPanel, BorderLayout.CENTER);
 
         toggleFunctionAssist(); // Change my mind. Want to show it by default and this is the easiest way to do it
 
@@ -382,6 +385,19 @@ public class AnalysisWindow {
             }
         });        
 
+        // Add status panel at the bottom
+        statusPanel = new JPanel(new BorderLayout());
+        processingBar = new JProgressBar();
+        processingBar.setIndeterminate(true);
+        processingLabel = new JLabel("Processing classes...");
+        processingLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        
+        statusPanel.add(processingLabel, BorderLayout.WEST);
+        statusPanel.add(processingBar, BorderLayout.CENTER);
+        statusPanel.setVisible(false);
+        
+        contentPanel.add(statusPanel, BorderLayout.SOUTH);
+
         return contentPanel;
     }      
 
@@ -422,18 +438,64 @@ public class AnalysisWindow {
         treeModel.reload();
         fileEntriesMap.clear();
         fileContentArea.setText("");
+        
+        // Start file processing
         LOGGER.info("Beginning file unzip and analysis process");
         unzipAndLoadToTree(file, filesRootNode, classesRootNode);
-        
-        // Add this: Select Info.plist after loading
-        SwingUtilities.invokeLater(() -> {
-            DefaultMutableTreeNode plistNode = findInfoPlistNode(filesRootNode);
-            if (plistNode != null) {
-                TreePath path = new TreePath(plistNode.getPath());
-                fileTree.setSelectionPath(path);
-                fileTree.scrollPathToVisible(path);
+
+        // Start Ghidra analysis in background
+        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                SwingUtilities.invokeLater(() -> {
+                    statusPanel.setVisible(true);
+                    processingLabel.setText("Analyzing executable with Ghidra...");
+                });
+                
+                initializeProject();
+                
+                SwingUtilities.invokeLater(() -> {
+                    populateClassesNode(classesRootNode);
+                    statusPanel.setVisible(false);
+                    treeModel.reload();
+                    
+                    // Move Info.plist selection here, after tree reload
+                    DefaultMutableTreeNode plistNode = findInfoPlistNode(filesRootNode);
+                    if (plistNode != null) {
+                        TreePath path = new TreePath(plistNode.getPath());
+                        // Expand all parent nodes
+                        TreePath parentPath = path.getParentPath();
+                        while (parentPath != null) {
+                            fileTree.expandPath(parentPath);
+                            parentPath = parentPath.getParentPath();
+                        }
+                        // Select and scroll to the Info.plist node
+                        fileTree.setSelectionPath(path);
+                        fileTree.scrollPathToVisible(path);
+                    }
+                });
+                
+                return null;
             }
-        });
+            
+            @Override
+            protected void done() {
+                try {
+                    get(); // Check for exceptions
+                } catch (Exception e) {
+                    LOGGER.log(Level.SEVERE, "Error during Ghidra analysis", e);
+                    SwingUtilities.invokeLater(() -> {
+                        statusPanel.setVisible(false);
+                        JOptionPane.showMessageDialog(analysisFrame,
+                            "Error during analysis: " + e.getMessage(),
+                            "Analysis Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    });
+                }
+            }
+        };
+        
+        worker.execute();
     }
 
     private static DefaultMutableTreeNode findInfoPlistNode(DefaultMutableTreeNode root) {
@@ -501,48 +563,149 @@ public class AnalysisWindow {
 
     private static void initializeProject() {
         LOGGER.info("Initializing project...");
-        projectDirectoryPath = FileProcessing.extractMachoToProjectDirectory(currentFilePath, 
-            infoPlist.getExecutableName(), config.getConfigDirectory());
-        LOGGER.info("Project directory created at: " + projectDirectoryPath);
-
-        FileProcessing.openProject(currentFilePath, projectDirectoryPath, 
-            infoPlist.getExecutableName(), config.getConfigDirectory());
-
-        executableFilePath = projectDirectoryPath + File.separator + infoPlist.getExecutableName();
-        LOGGER.info("Loading Mach-O file: " + executableFilePath);
-        projectMacho = new Macho(executableFilePath, projectDirectoryPath, infoPlist.getExecutableName());
-
-        String dbFilePath = projectDirectoryPath + File.separator + 
-            projectMacho.getMachoExecutableName() + "_malimite.db";
-        LOGGER.info("Checking for database at: " + dbFilePath);
-
-        File dbFile = new File(dbFilePath);
-        if (!dbFile.exists()) {
-            LOGGER.info("Database not found. Creating new database...");
-            dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
-                projectMacho.getMachoExecutableName() + "_malimite.db");
-
-            LOGGER.info("Starting Ghidra analysis...");
-            ghidraProject = new GhidraProject(infoPlist.getExecutableName(), 
-                executableFilePath, config, dbHandler);
         
-            if (projectMacho.isUniversalBinary()) {
-                LOGGER.info("Universal binary detected. Prompting for architecture selection...");
-                List<String> architectures = projectMacho.getArchitectureStrings();
-                String selectedArchitecture = selectArchitecture(architectures);
-                if (selectedArchitecture != null) {
-                    LOGGER.info("Selected architecture: " + selectedArchitecture);
-                    projectMacho.processUniversalMacho(selectedArchitecture);
+        // Create and show processing dialog
+        JDialog processingDialog = new JDialog(analysisFrame, "Processing", true);
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Create top panel for progress bar and status
+        JPanel topPanel = new JPanel(new BorderLayout(10, 10));
+        JProgressBar progressBar = new JProgressBar();
+        progressBar.setIndeterminate(true);
+        topPanel.add(progressBar, BorderLayout.CENTER);
+        
+        JLabel statusLabel = new JLabel("Initializing Ghidra analysis...");
+        topPanel.add(statusLabel, BorderLayout.SOUTH);
+        
+        // Create console output components
+        JTextArea consoleOutput = new JTextArea();
+        consoleOutput.setEditable(false);
+        consoleOutput.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JScrollPane consoleScrollPane = new JScrollPane(consoleOutput);
+        consoleScrollPane.setPreferredSize(new Dimension(600, 200));
+        
+        // Create toggle button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JToggleButton toggleConsoleButton = new JToggleButton("Show Processing Output");
+        buttonPanel.add(toggleConsoleButton);
+        
+        // Add components to main panel
+        mainPanel.add(topPanel, BorderLayout.NORTH);
+        mainPanel.add(buttonPanel, BorderLayout.CENTER);
+        
+        // Initially hide console
+        consoleScrollPane.setVisible(false);
+        
+        // Toggle console visibility
+        toggleConsoleButton.addActionListener(e -> {
+            consoleScrollPane.setVisible(toggleConsoleButton.isSelected());
+            processingDialog.pack();
+            processingDialog.setLocationRelativeTo(analysisFrame);
+        });
+        
+        mainPanel.add(consoleScrollPane, BorderLayout.SOUTH);
+        processingDialog.add(mainPanel);
+        processingDialog.pack();
+        processingDialog.setLocationRelativeTo(analysisFrame);
+        
+        // Create a SwingWorker to handle the background processing
+        SwingWorker<Void, String> worker = new SwingWorker<Void, String>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                publish("Extracting Mach-O file...");
+                projectDirectoryPath = FileProcessing.extractMachoToProjectDirectory(currentFilePath, 
+                    infoPlist.getExecutableName(), config.getConfigDirectory());
+                LOGGER.info("Project directory created at: " + projectDirectoryPath);
+
+                publish("Opening project...");
+                FileProcessing.openProject(currentFilePath, projectDirectoryPath, 
+                    infoPlist.getExecutableName(), config.getConfigDirectory());
+
+                executableFilePath = projectDirectoryPath + File.separator + infoPlist.getExecutableName();
+                LOGGER.info("Loading Mach-O file: " + executableFilePath);
+                
+                publish("Loading Mach-O file...");
+                projectMacho = new Macho(executableFilePath, projectDirectoryPath, infoPlist.getExecutableName());
+
+                String dbFilePath = projectDirectoryPath + File.separator + 
+                    projectMacho.getMachoExecutableName() + "_malimite.db";
+                LOGGER.info("Checking for database at: " + dbFilePath);
+
+                File dbFile = new File(dbFilePath);
+                if (!dbFile.exists()) {
+                    publish("Creating new database...");
+                    dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
+                        projectMacho.getMachoExecutableName() + "_malimite.db");
+
+                    publish("Starting Ghidra analysis...");
+                    ghidraProject = new GhidraProject(infoPlist.getExecutableName(), 
+                        executableFilePath, config, dbHandler, 
+                        // Add console output callback
+                        message -> SwingUtilities.invokeLater(() -> {
+                            consoleOutput.append(message + "\n");
+                            consoleOutput.setCaretPosition(consoleOutput.getDocument().getLength());
+                        }));
+                
+                    if (projectMacho.isUniversalBinary()) {
+                        processingDialog.setVisible(false);  // Hide dialog for architecture selection
+                        List<String> architectures = projectMacho.getArchitectureStrings();
+                        String selectedArchitecture = selectArchitecture(architectures);
+                        processingDialog.setVisible(true);  // Show dialog again
+                        if (selectedArchitecture != null) {
+                            publish("Processing " + selectedArchitecture + " architecture...");
+                            projectMacho.processUniversalMacho(selectedArchitecture);
+                        }
+                    }
+                    projectMacho.printArchitectures();
+                    publish("Decompiling with Ghidra...");
+                    ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, projectMacho);
+                } else {
+                    publish("Loading existing database...");
+                    dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
+                        projectMacho.getMachoExecutableName() + "_malimite.db");
+                }
+                return null;
+            }
+            
+            @Override
+            protected void process(List<String> chunks) {
+                if (!chunks.isEmpty()) {
+                    String message = chunks.get(chunks.size() - 1);
+                    statusLabel.setText(message);
+                    consoleOutput.append(message + "\n");
+                    consoleOutput.setCaretPosition(consoleOutput.getDocument().getLength());
                 }
             }
-            projectMacho.printArchitectures();
-            LOGGER.info("Starting Ghidra decompilation process...");
-            ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, projectMacho);
-        } else {
-            LOGGER.info("Using existing database from previous analysis");
-            dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
-                projectMacho.getMachoExecutableName() + "_malimite.db");
-        }
+            
+            @Override
+            protected void done() {
+                processingDialog.dispose();
+                try {
+                    get();
+                    if (analysisFrame != null) {
+                        SwingUtilities.invokeLater(() -> {
+                            analysisFrame.toFront();
+                            analysisFrame.requestFocus();
+                            if (analysisFrame.getExtendedState() == Frame.ICONIFIED) {
+                                analysisFrame.setExtendedState(Frame.NORMAL);
+                            }
+                            analysisFrame.setAlwaysOnTop(true);
+                            analysisFrame.setAlwaysOnTop(false);
+                        });
+                    }
+                } catch (Exception e) {
+                    LOGGER.log(Level.SEVERE, "Error during project initialization", e);
+                    JOptionPane.showMessageDialog(analysisFrame,
+                        "Error during initialization: " + e.getMessage(),
+                        "Initialization Error",
+                        JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        };
+        
+        worker.execute();
+        processingDialog.setVisible(true);
     }
 
     private static String selectArchitecture(List<String> architectures) {
@@ -865,8 +1028,15 @@ public class AnalysisWindow {
     }
 
     private static void showFunctionAcceptanceDialog(String aiResponse) {
-        String[] functions = aiResponse.split("\n\n");
-    
+        System.out.println("AI response: " + aiResponse);
+        
+        // Split response into functions using the tags
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+            "BEGIN_FUNCTION\\s*(.+?)\\s*END_FUNCTION",
+            java.util.regex.Pattern.DOTALL
+        );
+        java.util.regex.Matcher matcher = pattern.matcher(aiResponse);
+        
         JPanel mainPanel = new JPanel(new BorderLayout());
         JPanel functionsPanel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
@@ -875,12 +1045,12 @@ public class AnalysisWindow {
         gbc.weightx = 1.0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(5, 5, 5, 5);
-    
-        // Get selected function names from functionList
+
+        // Get selected function names from functionList in order
         JList<String> functionList = (JList<String>) ((JScrollPane) ((JPanel) functionAssistPanel
             .getComponent(1)).getComponent(1)).getViewport().getView();
         List<String> selectedFunctionNames = functionList.getSelectedValuesList();
-    
+
         TreePath path = fileTree.getSelectionPath();
         if (path == null) {
             JOptionPane.showMessageDialog(analysisFrame, 
@@ -891,69 +1061,66 @@ public class AnalysisWindow {
         }
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         String className = node.getUserObject().toString();
-    
+
         // Map to track which function names the user has confirmed
         Map<JCheckBox, String> checkboxToCodeMap = new HashMap<>();
-        Map<JCheckBox, JComboBox<String>> checkboxToFunctionDropdownMap = new HashMap<>();
-    
-        for (String function : functions) {
-            if (function.trim().isEmpty()) continue;
-    
-            // Extract or guess function name (could be refined based on the structure of AI response)
-            String inferredFunctionName = extractFunctionName(function);
+        int functionIndex = 0;
+
+        while (matcher.find() && functionIndex < selectedFunctionNames.size()) {
+            String function = matcher.group(1).trim();
+            if (function.isEmpty()) continue;
+
+            String currentFunctionName = selectedFunctionNames.get(functionIndex);
             
             JPanel functionPanel = new JPanel(new BorderLayout());
             functionPanel.setBorder(BorderFactory.createEtchedBorder());
-    
+
             JPanel headerPanel = new JPanel(new BorderLayout());
-            JCheckBox checkbox = new JCheckBox("Replace function:");
+            JCheckBox checkbox = new JCheckBox("Replace function: " + currentFunctionName);
             
-            // Create dropdown for function name selection
-            JComboBox<String> functionDropdown = new JComboBox<>(selectedFunctionNames.toArray(new String[0]));
-            functionDropdown.setSelectedItem(inferredFunctionName != null && selectedFunctionNames.contains(inferredFunctionName) 
-                ? inferredFunctionName 
-                : selectedFunctionNames.get(0)); // Default to first option if no match
-    
-            // Display inferred function name as a label (could help user identify mismatches quickly)
-            JLabel inferredNameLabel = new JLabel("Inferred: " + (inferredFunctionName != null ? inferredFunctionName : "Unknown"));
+            // Display inferred function name as a label if we can extract it
+            String inferredFunctionName = extractFunctionName(function);
+            if (inferredFunctionName != null) {
+                JLabel inferredNameLabel = new JLabel("Inferred: " + inferredFunctionName);
+                headerPanel.add(inferredNameLabel, BorderLayout.EAST);
+            }
+
             headerPanel.add(checkbox, BorderLayout.WEST);
-            headerPanel.add(functionDropdown, BorderLayout.CENTER);
-            headerPanel.add(inferredNameLabel, BorderLayout.EAST);
-    
+
             JTextArea codeArea = new JTextArea(function);
             codeArea.setRows(8);
             codeArea.setEditable(false);
             JScrollPane scrollPane = new JScrollPane(codeArea);
-    
+
             functionPanel.add(headerPanel, BorderLayout.NORTH);
             functionPanel.add(scrollPane, BorderLayout.CENTER);
-    
+
             checkboxToCodeMap.put(checkbox, function);
-            checkboxToFunctionDropdownMap.put(checkbox, functionDropdown);
-    
+
             gbc.gridy++;
             functionsPanel.add(functionPanel, gbc);
+            functionIndex++;
         }
-    
+
         JScrollPane mainScrollPane = new JScrollPane(functionsPanel);
         mainScrollPane.setPreferredSize(new Dimension(800, 600));
         mainPanel.add(mainScrollPane, BorderLayout.CENTER);
-    
+
         int result = JOptionPane.showConfirmDialog(analysisFrame,
             mainPanel,
             "Accept or Reject Function Updates",
             JOptionPane.OK_CANCEL_OPTION,
             JOptionPane.PLAIN_MESSAGE);
-    
+
         if (result == JOptionPane.OK_OPTION) {
             boolean anyUpdates = false;
+            functionIndex = 0;
             for (Map.Entry<JCheckBox, String> entry : checkboxToCodeMap.entrySet()) {
                 JCheckBox checkbox = entry.getKey();
                 if (checkbox.isSelected()) {
                     String newCode = entry.getValue();
-                    JComboBox<String> functionDropdown = checkboxToFunctionDropdownMap.get(checkbox);
-                    String functionName = (String) functionDropdown.getSelectedItem();
-    
+                    String functionName = selectedFunctionNames.get(functionIndex);
+
                     // Update database and verify
                     dbHandler.updateFunctionDecompilation(functionName, className, newCode);
                     String verifyUpdate = dbHandler.getFunctionDecompilation(functionName, className);
@@ -963,8 +1130,9 @@ public class AnalysisWindow {
                         LOGGER.warning("Failed to update function: " + functionName);
                     }
                 }
+                functionIndex++;
             }
-    
+
             // Refresh display if any updates were made
             if (anyUpdates) {
                 SwingUtilities.invokeLater(() -> displayClassDecompilation(className));

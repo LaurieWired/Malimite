@@ -52,7 +52,9 @@ public class AIBackend {
     private static final String DEFAULT_PROMPT = 
         "Translate the following decompiled functions into Swift. " +
         "Return only the Swift code for these functions, preserving the method names and any global variables. " +
-        "You may adjust local variable names for readability, but do not add, remove, or modify any other methods or global definitions.";
+        "You may adjust local variable names for readability, but do not add, remove, or modify any other methods or global definitions. " +
+        "Surround each translated function with \"BEGIN_FUNCTION\" at the beginning and \"END_FUNCTION\" at the end. " +
+        "Keep functions in the same order as they appear in the original code.";
 
     public static String getDefaultPrompt() {
         return DEFAULT_PROMPT;

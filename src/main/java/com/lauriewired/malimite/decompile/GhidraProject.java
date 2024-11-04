@@ -15,6 +15,8 @@ import org.json.JSONObject;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
+import java.util.function.Consumer;
+
 public class GhidraProject {
     private static final Logger LOGGER = Logger.getLogger(GhidraProject.class.getName());
     private String ghidraProjectName;
@@ -22,11 +24,13 @@ public class GhidraProject {
     private String scriptPath;
     private SQLiteDBHandler dbHandler;
     private static final int PORT = 8765;
+    private Consumer<String> consoleOutputCallback;
 
-    public GhidraProject(String infoPlistBundleExecutable, String executableFilePath, Config config, SQLiteDBHandler dbHandler) {
+    public GhidraProject(String infoPlistBundleExecutable, String executableFilePath, Config config, SQLiteDBHandler dbHandler, Consumer<String> consoleOutputCallback) {
         this.ghidraProjectName = infoPlistBundleExecutable + "_malimite";
         this.config = config;
         this.dbHandler = dbHandler;
+        this.consoleOutputCallback = consoleOutputCallback;
         // Set script path based on current directory and OS
         String currentDir = System.getProperty("user.dir");
         this.scriptPath = Paths.get(currentDir, "DecompilerBridge", "ghidra").toString();
@@ -38,8 +42,8 @@ public class GhidraProject {
     public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho) {
         LOGGER.info("Starting Ghidra decompilation for: " + executableFilePath);
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-            serverSocket.setSoTimeout(10000); // 10-second timeout for accepting connections
-    
+            serverSocket.setSoTimeout(300000); // 5 minute timeout
+
             String analyzeHeadless = getAnalyzeHeadlessPath();
             
             ProcessBuilder builder = new ProcessBuilder(
@@ -56,24 +60,44 @@ public class GhidraProject {
                 "-deleteProject"
             );
             
-            // Redirect Ghidra's output and error streams to your Java application
+            // Redirect Ghidra's output and error streams
             builder.redirectErrorStream(true);
             Process process = builder.start();
-    
-            // Read Ghidra's output and display it in the Java application's console
-            try (BufferedReader ghidraOutput = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = ghidraOutput.readLine()) != null) {
-                    System.out.println("Ghidra Output: " + line);
+
+            // Read Ghidra's output in a separate thread
+            Thread outputThread = new Thread(() -> {
+                try (BufferedReader ghidraOutput = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = ghidraOutput.readLine()) != null) {
+                        final String outputLine = line;
+                        if (consoleOutputCallback != null) {
+                            consoleOutputCallback.accept("Ghidra: " + outputLine);
+                        }
+                        System.out.println("Ghidra Output: " + line);
+                    }
+                } catch (IOException e) {
+                    LOGGER.log(Level.SEVERE, "Error reading Ghidra output", e);
                 }
-            }
-    
+            });
+            outputThread.start();
+
             LOGGER.info("Starting Ghidra headless analyzer with command: " + String.join(" ", builder.command()));
             LOGGER.info("Waiting for Ghidra script connection on port " + PORT);
+            
             Socket socket = serverSocket.accept();
             LOGGER.info("Connection established with Ghidra script");
-    
+
             try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+                // Wait for initial connection confirmation
+                String connectionConfirmation = in.readLine();
+                if (!"CONNECTED".equals(connectionConfirmation)) {
+                    throw new RuntimeException("Did not receive proper connection confirmation from Ghidra script");
+                }
+                LOGGER.info("Ghidra script confirmed connection, beginning analysis");
+
+                // Reset socket timeout to unlimited for the actual analysis
+                socket.setSoTimeout(0);
+                
                 LOGGER.info("Reading class data from Ghidra script");
                 String line;
                 StringBuilder classDataBuilder = new StringBuilder();
@@ -118,13 +142,13 @@ public class GhidraProject {
                 }
                 LOGGER.info("Finished processing all data");
             }
-    
+
             process.waitFor();
             LOGGER.info("Ghidra analysis completed successfully");
-    
+
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error during Ghidra decompilation", e);
-            e.printStackTrace();
+            throw new RuntimeException("Ghidra decompilation failed: " + e.getMessage(), e);
         }
     }    
 
