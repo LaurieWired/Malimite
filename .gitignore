@@ -1,63 +1,52 @@
-# Compiled Java classes
-/target/
-/bin/
+# Ignore build output directories
+target/
+build/
+out/
 
-# Package files
+# Ignore VS Code settings
+.vscode/
+*.code-workspace
+
+# Ignore macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# macOS resource forks
+.Spotlight-V100
+.Trashes
+.VolumeIcon.icns
+.Icon?
+
+# Java-specific files
+*.class
 *.jar
 *.war
 *.ear
-
-# Maven specific
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-pom.xml.next
-release.properties
-dependency-reduced-pom.xml
-buildNumber.properties
-.mvn/timing.properties
-
-# Maven wrapper files
-.mvn/wrapper/maven-wrapper.jar
-.mvn/wrapper/maven-wrapper.properties
-.mvn/wrapper/MavenWrapperDownloader.java
-
-# IDE specific files
-/.idea/
-*.iml
-*.iws
-*.ipr
-*.swp
-*~.nib
-local.properties
-.loadpath
-
-# Eclipse specific
-.classpath
-.project
-.settings/
-
-# NetBeans specific
-/nbproject/private/
-/build/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-
-# VS Code specific
-.vscode/
-
-# OS specific files
-.DS_Store
-Thumbs.db
-
-# Logs
 *.log
 
-# Other files to ignore
-*.class
-*~
-*.bak
-*.swp
-*.tmp
+# Maven/Gradle output
+.mvn/
+.gradle/
+build/
+
+# Log files and system dumps
+*.log
+hs_err_pid*.log
+
+# Ignore IDE files
+.idea/
+*.iml
+.classpath
+.project
+
+# VS Code workspace settings
+*.code-workspace
+.vscode/*
+
+# Ignore local configuration file
+malimite.properties
+malimite.projects
