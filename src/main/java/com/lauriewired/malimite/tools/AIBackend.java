@@ -6,6 +6,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 import com.lauriewired.malimite.configuration.Config;
+import com.lauriewired.malimite.ui.AnalysisWindow;
+import com.lauriewired.malimite.configuration.Project;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -50,14 +52,16 @@ public class AIBackend {
     private static final String CLAUDE_API_URL = "https://api.anthropic.com/v1/complete";
 
     private static final String DEFAULT_PROMPT = 
-        "Translate the following decompiled functions into Swift. " +
-        "Return only the Swift code for these functions, preserving the method names and any global variables. " +
+        "Translate the following decompiled functions into %s. " +
+        "Return only the %s code for these functions, preserving the method names and any global variables. " +
         "You may adjust local variable names for readability, but do not add, remove, or modify any other methods or global definitions. " +
         "Surround each translated function with \"BEGIN_FUNCTION\" at the beginning and \"END_FUNCTION\" at the end. " +
         "Keep functions in the same order as they appear in the original code.";
 
     public static String getDefaultPrompt() {
-        return DEFAULT_PROMPT;
+        Project currentProject = AnalysisWindow.getCurrentProject();
+        String targetLanguage = currentProject != null && currentProject.isSwift() ? "Swift" : "Objective-C";
+        return String.format(DEFAULT_PROMPT, targetLanguage, targetLanguage);
     }
 
     public static String sendToModel(String provider, String modelId, String inputText, Config config) throws IOException {

@@ -10,6 +10,7 @@ public class Project {
     private boolean isMachO;
     private Macho machoInfo;  // Reference to Macho object if this is a Mach-O file
     private String bundleIdentifier;  // Add this field
+    private boolean isSwift;
     
     public Project() {
     }
@@ -36,6 +37,9 @@ public class Project {
     public String getBundleIdentifier() { return bundleIdentifier; }
     public void setBundleIdentifier(String bundleIdentifier) { this.bundleIdentifier = bundleIdentifier; }
     
+    public boolean isSwift() { return isSwift; }
+    public void setIsSwift(boolean isSwift) { this.isSwift = isSwift; }
+    
     public String generateInfoString() {
         StringBuilder info = new StringBuilder("<html>");
         info.append("<h3>File Analysis Report</h3>");
@@ -49,6 +53,7 @@ public class Project {
         
         if (isMachO && machoInfo != null) {
             info.append("<h4>Mach-O Analysis</h4>");
+            info.append("<p><b>Language:</b> ").append(this.isSwift ? "Swift" : "Objective-C").append("</p>");
             if (machoInfo.isUniversalBinary()) {
                 info.append("<p><b>Universal Binary:</b> Yes</p>");
                 info.append("<p><b>Architectures:</b></p><ul>");

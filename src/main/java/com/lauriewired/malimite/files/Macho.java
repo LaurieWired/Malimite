@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 
 public class Macho {
     private static final Logger LOGGER = Logger.getLogger(Macho.class.getName());
@@ -24,6 +27,7 @@ public class Macho {
     private String machoExecutablePath;
     private String outputDirectoryPath;
     private String machoExecutableName;
+    private boolean isSwift = false;
 
     public Macho(String machoExecutablePath, String outputDirectoryPath, String machoExecutableName) {
         this.isUniversal = false;
@@ -132,8 +136,30 @@ public class Macho {
                 this.isUniversal = false;
                 LOGGER.info("This is not a Universal binary.");
             }
+
+            // After processing the Mach-O headers, check for Swift
+            detectSwift(file);
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, "Error reading file", e);
+        }
+    }
+
+    private void detectSwift(File file) {
+        try {
+            // Read the file content as bytes
+            byte[] content = Files.readAllBytes(file.toPath());
+            String stringContent = new String(content, StandardCharsets.UTF_8);
+
+            // Look for common Swift indicators in the binary
+            isSwift = stringContent.contains("Swift Runtime") || 
+                      stringContent.contains("SwiftCore") ||
+                      stringContent.contains("_swift_") ||
+                      stringContent.contains("_$s");  // Swift name mangling prefix
+
+            LOGGER.info("Binary detected as: " + (isSwift ? "Swift" : "Objective-C"));
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, "Error detecting Swift/Objective-C", e);
+            isSwift = false; // Default to Objective-C if detection fails
         }
     }
 
@@ -228,5 +254,9 @@ public class Macho {
 
     public String getMachoExecutableName() {
         return this.machoExecutableName;
+    }
+
+    public boolean isSwift() {
+        return isSwift;
     }
 }

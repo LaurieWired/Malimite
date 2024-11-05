@@ -22,7 +22,7 @@ public class ApplicationMenu {
         JMenuBar menuBar = new JMenuBar();
         menuBar.add(createFileMenu());
         menuBar.add(createViewMenu());
-        menuBar.add(createToolsMenu());
+        menuBar.add(createWindowsMenu());
         menuBar.add(createHelpMenu());
         return menuBar;
     }
@@ -72,18 +72,25 @@ public class ApplicationMenu {
         return viewMenu;
     }
 
-    private JMenu createToolsMenu() {
-        JMenu toolsMenu = new JMenu("Tools");
-        toolsMenu.setMnemonic(KeyEvent.VK_T);
+    private JMenu createWindowsMenu() {
+        JMenu windowsMenu = new JMenu("Windows");
+        windowsMenu.setMnemonic(KeyEvent.VK_W);
 
-        addMenuItem(toolsMenu, "Function Assist", e -> {
+        addMenuItem(windowsMenu, "Function Assist", e -> {
             System.out.println("Function Assist menu item clicked");
             AnalysisWindow.toggleFunctionAssist();
         },
             KeyStroke.getKeyStroke(KeyEvent.VK_L, config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
         );
 
-        return toolsMenu;
+        addMenuItem(windowsMenu, "Strings", e -> {
+            System.out.println("Strings menu item clicked");
+            AnalysisWindow.toggleFunctionAssist();
+        },
+            KeyStroke.getKeyStroke(KeyEvent.VK_S, config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
+        );
+
+        return windowsMenu;
     }
 
     private JMenu createHelpMenu() {

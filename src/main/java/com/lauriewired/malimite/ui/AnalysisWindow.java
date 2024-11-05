@@ -17,6 +17,7 @@ import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseAdapter;
 
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
@@ -55,7 +56,10 @@ public class AnalysisWindow {
     private static Config config;
 
     private static JSplitPane mainSplitPane;
+    private static JSplitPane rightSplitPane;
+    private static JSplitPane rightVerticalSplitPane;
     private static JPanel functionAssistPanel;
+    private static JPanel stringsPanel;
     private static boolean functionAssistVisible = false;
     private static JLabel bundleIdValue;
     private static JLabel closeLabel;
@@ -66,6 +70,12 @@ public class AnalysisWindow {
     private static JProgressBar processingBar;
     private static JLabel processingLabel;
     private static JPanel statusPanel;
+
+    private static JTextPane infoDisplay;
+
+    private static Project currentProject;
+
+    private static JLabel stringsCloseLabel;
 
     public static void show(File file, Config config) {
         SafeMenuAction.execute(() -> {
@@ -91,7 +101,19 @@ public class AnalysisWindow {
             DefaultMutableTreeNode filesRootNode = (DefaultMutableTreeNode) hiddenRoot.getChildAt(1);
 
             loadAndAnalyzeFile(file, filesRootNode, classesRootNode);
+            
+            Project project = updateFileInfo(new File(currentFilePath), projectMacho);
+            infoDisplay.setText(project.generateInfoString());
+            
+            // Select Info.plist node by default
+            DefaultMutableTreeNode infoNode = findInfoPlistNode((DefaultMutableTreeNode) treeModel.getRoot());
 
+            if (infoNode != null) {
+                TreePath infoPath = new TreePath(treeModel.getPathToRoot(infoNode));
+                fileTree.setSelectionPath(infoPath);
+                fileTree.scrollPathToVisible(infoPath);
+            }
+            
             analysisFrame.setVisible(true);
 
             analysisFrame.addWindowListener(new java.awt.event.WindowAdapter() {
@@ -138,7 +160,7 @@ public class AnalysisWindow {
         RTextScrollPane contentScrollPane = new RTextScrollPane(fileContentArea);
     
         // Create info display panel
-        JTextPane infoDisplay = new JTextPane();
+        infoDisplay = new JTextPane();
         infoDisplay.setContentType("text/html");
         infoDisplay.setEditable(false);
         infoDisplay.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
@@ -330,16 +352,54 @@ public class AnalysisWindow {
 
         functionAssistPanel.setVisible(false); // Start with the panel hidden
 
-        // Add functionAssistPanel to the right of rightPanel using a split pane
-        JSplitPane rightSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, rightPanel, functionAssistPanel);
+        // Create strings panel
+        stringsPanel = new JPanel(new BorderLayout());
+        stringsPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        
+        // Create header for strings panel
+        JPanel stringsHeaderPanel = new JPanel(new BorderLayout());
+        JLabel stringsLabel = new JLabel("Strings", SwingConstants.CENTER);
+        stringsLabel.setFont(stringsLabel.getFont().deriveFont(Font.BOLD));
+        stringsLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
+        
+        // Add close button for strings panel
+        stringsCloseLabel = new JLabel("✕");  // Using "✕" as the close symbol
+        stringsCloseLabel.setFont(stringsCloseLabel.getFont().deriveFont(14.0f));
+        stringsCloseLabel.setBorder(BorderFactory.createEmptyBorder(0, 5, 10, 5));
+        stringsCloseLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        stringsCloseLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                toggleFunctionAssist();  // Reuse the same toggle since panels are linked
+            }
+        });
+        stringsCloseLabel.setVisible(functionAssistVisible);
+        
+        stringsHeaderPanel.add(stringsLabel, BorderLayout.CENTER);
+        stringsHeaderPanel.add(stringsCloseLabel, BorderLayout.EAST);
+        
+        stringsPanel.add(stringsHeaderPanel, BorderLayout.NORTH);
+        
+        // Create placeholder content
+        JTextArea stringsContent = new JTextArea("String analysis will appear here...");
+        stringsContent.setEditable(false);
+        stringsContent.setBackground(null);
+        stringsContent.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        JScrollPane stringsScrollPane = new JScrollPane(stringsContent);
+        stringsPanel.add(stringsScrollPane, BorderLayout.CENTER);
+
+        // Create vertical split pane for strings and function assist
+        rightVerticalSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, stringsPanel, functionAssistPanel);
+        rightVerticalSplitPane.setResizeWeight(0.5);  // 50/50 split
+
+        // Modify the existing right split pane creation to use the vertical split pane
+        rightSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, rightPanel, rightVerticalSplitPane);
         rightSplitPane.setDividerLocation(1.0);
         rightSplitPane.setResizeWeight(1.0);
-    
+
         // Combine left and right panels
         mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightSplitPane);
         mainSplitPane.setDividerLocation(300);
-    
-        updateFileInfo(new File(currentFilePath), infoDisplay);
     
         JPanel contentPanel = new JPanel(new BorderLayout());
         contentPanel.add(mainSplitPane, BorderLayout.CENTER);
@@ -401,20 +461,16 @@ public class AnalysisWindow {
         return contentPanel;
     }      
 
-    private static void updateFileInfo(File file, JTextPane infoDisplay) {
+    private static Project updateFileInfo(File file, Macho macho) {
         Project project = new Project();
         project.setFileName(file.getName());
         project.setFilePath(file.getAbsolutePath());
         project.setFileSize(file.length());
         
         try {
-            // Check if it's a Mach-O file
-            Macho macho = new Macho(file.getAbsolutePath(), 
-                                   file.getParent(), 
-                                   file.getName());
-            
             project.setIsMachO(true);
             project.setMachoInfo(macho);
+            project.setIsSwift(macho.isSwift());
             
             if (macho.isUniversalBinary()) {
                 project.setFileType("Universal Mach-O Binary");
@@ -426,85 +482,41 @@ public class AnalysisWindow {
             project.setIsMachO(false);
             LOGGER.warning("Error reading file format: " + ex.getMessage());
         }
-        
-        infoDisplay.setText(project.generateInfoString());
+
+        currentProject = project;
+        return project;
     }
 
     private static void loadAndAnalyzeFile(File file, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
         LOGGER.info("Starting analysis on " + file.getName());
         fileNameLabel.setText(file.getName());
-        LOGGER.info("Clearing previous tree data");
         filesRootNode.removeAllChildren();
         treeModel.reload();
         fileEntriesMap.clear();
         fileContentArea.setText("");
-        
-        // Start file processing
+    
         LOGGER.info("Beginning file unzip and analysis process");
         unzipAndLoadToTree(file, filesRootNode, classesRootNode);
-
-        // Start Ghidra analysis in background
-        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                SwingUtilities.invokeLater(() -> {
-                    statusPanel.setVisible(true);
-                    processingLabel.setText("Analyzing executable with Ghidra...");
-                });
-                
-                initializeProject();
-                
-                SwingUtilities.invokeLater(() -> {
-                    populateClassesNode(classesRootNode);
-                    statusPanel.setVisible(false);
-                    treeModel.reload();
-                    
-                    // Move Info.plist selection here, after tree reload
-                    DefaultMutableTreeNode plistNode = findInfoPlistNode(filesRootNode);
-                    if (plistNode != null) {
-                        TreePath path = new TreePath(plistNode.getPath());
-                        // Expand all parent nodes
-                        TreePath parentPath = path.getParentPath();
-                        while (parentPath != null) {
-                            fileTree.expandPath(parentPath);
-                            parentPath = parentPath.getParentPath();
-                        }
-                        // Select and scroll to the Info.plist node
-                        fileTree.setSelectionPath(path);
-                        fileTree.scrollPathToVisible(path);
-                    }
-                });
-                
-                return null;
-            }
-            
-            @Override
-            protected void done() {
-                try {
-                    get(); // Check for exceptions
-                } catch (Exception e) {
-                    LOGGER.log(Level.SEVERE, "Error during Ghidra analysis", e);
-                    SwingUtilities.invokeLater(() -> {
-                        statusPanel.setVisible(false);
-                        JOptionPane.showMessageDialog(analysisFrame,
-                            "Error during analysis: " + e.getMessage(),
-                            "Analysis Error",
-                            JOptionPane.ERROR_MESSAGE);
-                    });
-                }
-            }
-        };
-        
-        worker.execute();
     }
 
     private static DefaultMutableTreeNode findInfoPlistNode(DefaultMutableTreeNode root) {
+        // Find the Files node first
         for (int i = 0; i < root.getChildCount(); i++) {
-            DefaultMutableTreeNode appNode = (DefaultMutableTreeNode) root.getChildAt(i);
-            for (int j = 0; j < appNode.getChildCount(); j++) {
-                DefaultMutableTreeNode child = (DefaultMutableTreeNode) appNode.getChildAt(j);
-                if (child.getUserObject().toString().equals("Info.plist")) {
-                    return child;
+            DefaultMutableTreeNode filesNode = (DefaultMutableTreeNode) root.getChildAt(i);
+            
+            if (filesNode.getUserObject().toString().equals("Files")) {
+                // Look for the .app directory directly under Files
+                for (int j = 0; j < filesNode.getChildCount(); j++) {
+                    DefaultMutableTreeNode appNode = (DefaultMutableTreeNode) filesNode.getChildAt(j);
+                    if (appNode.getUserObject().toString().endsWith(".app/")) {
+                        // Look for Info.plist directly under the .app directory
+                        for (int k = 0; k < appNode.getChildCount(); k++) {
+                            DefaultMutableTreeNode child = (DefaultMutableTreeNode) appNode.getChildAt(k);
+                            if (child.getUserObject().toString().equals("Info.plist")) {
+                                return child;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -658,7 +670,7 @@ public class AnalysisWindow {
                         }
                     }
                     projectMacho.printArchitectures();
-                    publish("Decompiling with Ghidra...");
+                    publish("Processing and decompiling...");
                     ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, projectMacho);
                 } else {
                     publish("Loading existing database...");
@@ -882,7 +894,6 @@ public class AnalysisWindow {
     }
 
     private static void updateBundleIdDisplay(String bundleId) {
-        System.out.println("Updating bundle ID display to: " + bundleId);
         SwingUtilities.invokeLater(() -> {
             if (bundleIdValue != null) {
                 bundleIdValue.setText(bundleId != null ? bundleId : "N/A");
@@ -894,13 +905,13 @@ public class AnalysisWindow {
         if (functionAssistPanel != null && mainSplitPane != null) {
             functionAssistVisible = !functionAssistVisible;
             functionAssistPanel.setVisible(functionAssistVisible);
-            closeLabel.setVisible(functionAssistVisible);  // Only show X when panel is visible
-
-            // Adjust the rightSplitPane divider location based on visibility
-            JSplitPane rightSplitPane = (JSplitPane) mainSplitPane.getRightComponent();
+            stringsPanel.setVisible(functionAssistVisible);
+            closeLabel.setVisible(functionAssistVisible);
+            stringsCloseLabel.setVisible(functionAssistVisible);
 
             if (functionAssistVisible) {
-                rightSplitPane.setDividerLocation(rightSplitPane.getWidth() - functionAssistPanel.getPreferredSize().width);
+                rightSplitPane.setDividerLocation(rightSplitPane.getWidth() - 300);  // Fixed width for both panels
+                rightVerticalSplitPane.setDividerLocation(0.5);  // Maintain 50/50 split
             } else {
                 rightSplitPane.setDividerLocation(1.0);
             }
@@ -1028,8 +1039,6 @@ public class AnalysisWindow {
     }
 
     private static void showFunctionAcceptanceDialog(String aiResponse) {
-        System.out.println("AI response: " + aiResponse);
-        
         // Split response into functions using the tags
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
             "BEGIN_FUNCTION\\s*(.+?)\\s*END_FUNCTION",
@@ -1075,24 +1084,16 @@ public class AnalysisWindow {
             JPanel functionPanel = new JPanel(new BorderLayout());
             functionPanel.setBorder(BorderFactory.createEtchedBorder());
 
-            JPanel headerPanel = new JPanel(new BorderLayout());
+            // Simplified header with just the checkbox, selected by default
             JCheckBox checkbox = new JCheckBox("Replace function: " + currentFunctionName);
-            
-            // Display inferred function name as a label if we can extract it
-            String inferredFunctionName = extractFunctionName(function);
-            if (inferredFunctionName != null) {
-                JLabel inferredNameLabel = new JLabel("Inferred: " + inferredFunctionName);
-                headerPanel.add(inferredNameLabel, BorderLayout.EAST);
-            }
-
-            headerPanel.add(checkbox, BorderLayout.WEST);
+            checkbox.setSelected(true);  // Set checked by default
 
             JTextArea codeArea = new JTextArea(function);
             codeArea.setRows(8);
             codeArea.setEditable(false);
             JScrollPane scrollPane = new JScrollPane(codeArea);
 
-            functionPanel.add(headerPanel, BorderLayout.NORTH);
+            functionPanel.add(checkbox, BorderLayout.NORTH);
             functionPanel.add(scrollPane, BorderLayout.CENTER);
 
             checkboxToCodeMap.put(checkbox, function);
@@ -1103,7 +1104,8 @@ public class AnalysisWindow {
         }
 
         JScrollPane mainScrollPane = new JScrollPane(functionsPanel);
-        mainScrollPane.setPreferredSize(new Dimension(800, 600));
+        // Remove fixed height, let it be determined by content
+        mainScrollPane.setPreferredSize(new Dimension(800, Math.min(600, functionsPanel.getPreferredSize().height + 50)));
         mainPanel.add(mainScrollPane, BorderLayout.CENTER);
 
         int result = JOptionPane.showConfirmDialog(analysisFrame,
@@ -1199,5 +1201,9 @@ public class AnalysisWindow {
 
         // Refresh the display
         displayFunctionDecompilation(functionName, className);
+    }
+
+    public static Project getCurrentProject() {
+        return currentProject;
     }
 }
