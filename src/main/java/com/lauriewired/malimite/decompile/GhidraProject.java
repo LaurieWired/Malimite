@@ -46,7 +46,7 @@ public class GhidraProject {
 
             String analyzeHeadless = getAnalyzeHeadlessPath();
             
-            ProcessBuilder builder = new ProcessBuilder(
+            ProcessBuilder builder = new ProcessBuilder(    
                 analyzeHeadless,
                 projectDirectoryPath,
                 this.ghidraProjectName,
@@ -140,6 +140,28 @@ public class GhidraProject {
                     LOGGER.info("Updating function: " + functionName + " in class: " + className + " with decompiled code");
                     dbHandler.updateFunctionDecompilation(functionName, className, decompiledCode);
                 }
+
+                // Add this new section to process strings
+                LOGGER.info("Reading string data from Ghidra script");
+                StringBuilder stringDataBuilder = new StringBuilder();
+                while (!(line = in.readLine()).equals("END_STRING_DATA")) {
+                    stringDataBuilder.append(line).append("\n");
+                }
+
+                // Process string data
+                JSONArray stringData = new JSONArray(stringDataBuilder.toString());
+                LOGGER.info("Processing " + stringData.length() + " strings from Ghidra analysis");
+
+                for (int i = 0; i < stringData.length(); i++) {
+                    JSONObject stringObj = stringData.getJSONObject(i);
+                    String address = stringObj.getString("address");
+                    String value = stringObj.getString("value");
+                    String segment = stringObj.getString("segment");
+                    String label = stringObj.getString("label");
+                    LOGGER.info("Inserting string: " + value + " at address: " + address);
+                    dbHandler.insertMachoString(address, value, segment, label);
+                }
+
                 LOGGER.info("Finished processing all data");
             }
 

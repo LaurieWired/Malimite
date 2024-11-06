@@ -6,6 +6,8 @@ import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.address.Address;
 import ghidra.util.task.ConsoleTaskMonitor;
 import ghidra.program.model.listing.*;
+import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.StringDataType;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -138,6 +140,38 @@ public class DumpClassData extends GhidraScript {
         return jsonOutput;
     }
 
+    private JSONArray extractStrings(Program program) {
+        Memory memory = program.getMemory();
+        Listing listing = program.getListing();
+        JSONArray stringsArray = new JSONArray();
+        
+        for (MemoryBlock block : memory.getBlocks()) {
+            if (!block.isInitialized()) continue;
+            
+            DataIterator dataIterator = listing.getDefinedData(block.getStart(), true);
+            while (dataIterator.hasNext()) {
+                Data data = dataIterator.next();
+                if (!block.contains(data.getAddress())) continue;
+                
+                // Check if the data type is a string
+                DataType dataType = data.getDataType();
+                if (dataType instanceof StringDataType) {
+                    String value = data.getDefaultValueRepresentation(); // Retrieves the string value
+                    // Only include strings of length 5 or more
+                    if (value.length() >= 5) {
+                        JSONObject stringObj = new JSONObject();
+                        stringObj.put("address", data.getAddress().toString());
+                        stringObj.put("value", value);
+                        stringObj.put("segment", block.getName());
+                        stringObj.put("label", data.getLabel() != null ? data.getLabel() : "");
+                        stringsArray.put(stringObj);
+                    }
+                }
+            }
+        }
+        return stringsArray;
+    }
+
     private void sendDataViaSocket(JSONArray classData, JSONObject machoData, JSONArray functionData) {
         int port = getPort();
         if (port == -1) return;
@@ -145,10 +179,7 @@ public class DumpClassData extends GhidraScript {
         try (Socket socket = new Socket("localhost", port);
              PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
             
-            // Send immediate connection confirmation
             out.println("CONNECTED");
-            
-            // Start the actual analysis
             println("Beginning analysis...");
             
             // Send class data
@@ -162,6 +193,11 @@ public class DumpClassData extends GhidraScript {
             // Send function decompilation data
             out.println(functionData.toString(4));
             out.println("END_DATA");
+
+            // Send string data
+            JSONArray stringData = extractStrings(currentProgram);
+            out.println(stringData.toString(4));
+            out.println("END_STRING_DATA");
 
         } catch (IOException e) {
             printerr("Error sending data via socket: " + e.getMessage());

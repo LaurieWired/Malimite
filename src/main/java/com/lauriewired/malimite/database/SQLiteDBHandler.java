@@ -46,10 +46,25 @@ public class SQLiteDBHandler {
                 + "DecompilationCode TEXT,"
                 + "PRIMARY KEY (FunctionName, ParentClass));";  // Composite key to allow same function name in different classes
 
+        String sqlMachoStrings = "CREATE TABLE IF NOT EXISTS MachoStrings ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "address TEXT,"
+                + "value TEXT,"
+                + "segment TEXT,"
+                + "label TEXT);";
+
+        String sqlResourceStrings = "CREATE TABLE IF NOT EXISTS ResourceStrings ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "resourceId TEXT,"
+                + "value TEXT,"
+                + "type TEXT);";
+
         try (Connection conn = DriverManager.getConnection(url);
              Statement stmt = conn.createStatement()) {
             stmt.execute(sqlClasses);
             stmt.execute(sqlFunctions);
+            stmt.execute(sqlMachoStrings);
+            stmt.execute(sqlResourceStrings);
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
@@ -267,5 +282,77 @@ public class SQLiteDBHandler {
             System.out.println(e.getMessage());
         }
         return null;
+    }
+
+    public void insertMachoString(String address, String value, String segment, String label) {
+        String sql = "INSERT INTO MachoStrings(address, value, segment, label) VALUES(?,?,?,?)";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, address);
+            pstmt.setString(2, value);
+            pstmt.setString(3, segment);
+            pstmt.setString(4, label);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    public List<Map<String, String>> getMachoStrings() {
+        List<Map<String, String>> strings = new ArrayList<>();
+        String sql = "SELECT * FROM MachoStrings";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                Map<String, String> string = new HashMap<>();
+                string.put("address", rs.getString("address"));
+                string.put("value", rs.getString("value"));
+                string.put("segment", rs.getString("segment"));
+                string.put("label", rs.getString("label"));
+                strings.add(string);
+            }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return strings;
+    }
+
+    public void insertResourceString(String resourceId, String value, String type) {
+        String sql = "INSERT INTO ResourceStrings(resourceId, value, type) VALUES(?,?,?)";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, resourceId);
+            pstmt.setString(2, value);
+            pstmt.setString(3, type);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    public List<Map<String, String>> getResourceStrings() {
+        List<Map<String, String>> strings = new ArrayList<>();
+        String sql = "SELECT * FROM ResourceStrings";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                Map<String, String> string = new HashMap<>();
+                string.put("resourceId", rs.getString("resourceId"));
+                string.put("value", rs.getString("value"));
+                string.put("type", rs.getString("type"));
+                strings.add(string);
+            }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return strings;
     }
 }

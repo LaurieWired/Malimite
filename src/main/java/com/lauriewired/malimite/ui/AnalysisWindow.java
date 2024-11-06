@@ -9,6 +9,7 @@ import java.awt.*;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,7 @@ import com.lauriewired.malimite.database.SQLiteDBHandler;
 import com.lauriewired.malimite.decompile.GhidraProject;
 import com.lauriewired.malimite.files.InfoPlist;
 import com.lauriewired.malimite.files.Macho;
+import com.lauriewired.malimite.files.MobileProvision;
 import com.lauriewired.malimite.utils.FileProcessing;
 import com.lauriewired.malimite.utils.NodeOperations;
 import com.lauriewired.malimite.utils.PlistUtils;
@@ -76,6 +78,9 @@ public class AnalysisWindow {
     private static Project currentProject;
 
     private static JLabel stringsCloseLabel;
+
+    private static JPanel resourceStringsPanel;
+    private static JLabel resourceStringsCloseLabel;
 
     public static void show(File file, Config config) {
         SafeMenuAction.execute(() -> {
@@ -358,7 +363,7 @@ public class AnalysisWindow {
         
         // Create header for strings panel
         JPanel stringsHeaderPanel = new JPanel(new BorderLayout());
-        JLabel stringsLabel = new JLabel("Strings", SwingConstants.CENTER);
+        JLabel stringsLabel = new JLabel("Mach-O Strings", SwingConstants.CENTER);
         stringsLabel.setFont(stringsLabel.getFont().deriveFont(Font.BOLD));
         stringsLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
         
@@ -388,11 +393,55 @@ public class AnalysisWindow {
         JScrollPane stringsScrollPane = new JScrollPane(stringsContent);
         stringsPanel.add(stringsScrollPane, BorderLayout.CENTER);
 
-        // Create vertical split pane for strings and function assist
-        rightVerticalSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, stringsPanel, functionAssistPanel);
-        rightVerticalSplitPane.setResizeWeight(0.5);  // 50/50 split
+        // Create resource strings panel
+        resourceStringsPanel = new JPanel(new BorderLayout());
+        resourceStringsPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        // Modify the existing right split pane creation to use the vertical split pane
+        // Create header for resource strings panel
+        JPanel resourceStringsHeaderPanel = new JPanel(new BorderLayout());
+        JLabel resourceStringsLabel = new JLabel("Resource Strings", SwingConstants.CENTER);
+        resourceStringsLabel.setFont(resourceStringsLabel.getFont().deriveFont(Font.BOLD));
+        resourceStringsLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
+
+        // Add close button for resource strings panel
+        resourceStringsCloseLabel = new JLabel("✕");
+        resourceStringsCloseLabel.setFont(resourceStringsCloseLabel.getFont().deriveFont(14.0f));
+        resourceStringsCloseLabel.setBorder(BorderFactory.createEmptyBorder(0, 5, 10, 5));
+        resourceStringsCloseLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        resourceStringsCloseLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                toggleFunctionAssist();  // Reuse the same toggle since panels are linked
+            }
+        });
+        resourceStringsCloseLabel.setVisible(functionAssistVisible);
+
+        resourceStringsHeaderPanel.add(resourceStringsLabel, BorderLayout.CENTER);
+        resourceStringsHeaderPanel.add(resourceStringsCloseLabel, BorderLayout.EAST);
+
+        resourceStringsPanel.add(resourceStringsHeaderPanel, BorderLayout.NORTH);
+
+        // Create placeholder content
+        JTextArea resourceStringsContent = new JTextArea("Resource string analysis will appear here...");
+        resourceStringsContent.setEditable(false);
+        resourceStringsContent.setBackground(null);
+        resourceStringsContent.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        JScrollPane resourceStringsScrollPane = new JScrollPane(resourceStringsContent);
+        resourceStringsPanel.add(resourceStringsScrollPane, BorderLayout.CENTER);
+
+        // Create vertical split pane for all three panels
+        rightVerticalSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+        rightVerticalSplitPane.setResizeWeight(0.33); // Give each panel equal space
+
+        // First split: Strings and Resource Strings
+        JSplitPane topSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, stringsPanel, resourceStringsPanel);
+        topSplitPane.setResizeWeight(0.5);  // Equal split between top two panels
+
+        // Add the top split pane and function assist panel to the main vertical split
+        rightVerticalSplitPane.setTopComponent(topSplitPane);
+        rightVerticalSplitPane.setBottomComponent(functionAssistPanel);
+
+        // Create the main horizontal split between content and right panels
         rightSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, rightPanel, rightVerticalSplitPane);
         rightSplitPane.setDividerLocation(1.0);
         rightSplitPane.setResizeWeight(1.0);
@@ -497,6 +546,9 @@ public class AnalysisWindow {
     
         LOGGER.info("Beginning file unzip and analysis process");
         unzipAndLoadToTree(file, filesRootNode, classesRootNode);
+        
+        // Add this line to populate the strings panel after loading the tree
+        populateMachoStringsPanel();
     }
 
     private static DefaultMutableTreeNode findInfoPlistNode(DefaultMutableTreeNode root) {
@@ -795,35 +847,43 @@ public class AnalysisWindow {
             fullPath.append(((DefaultMutableTreeNode) path.getPathComponent(i)).getUserObject().toString());
         }
 
-        // Only proceed if this path exists in our fileEntriesMap (meaning it's a file, not a directory)
+        // Only proceed if this path exists in our fileEntriesMap
         String entryPath = fileEntriesMap.get(fullPath.toString());
         if (entryPath == null) {
-            return; // Exit if this is a directory or non-existent path
+            return;
         }
 
         if (currentFilePath != null) {
             try {
                 byte[] contentBytes = FileProcessing.readContentFromZip(currentFilePath, entryPath);
                 String contentText;
-        
-                // Set appropriate syntax style based on file type
-                if (fullPath.toString().endsWith("plist")) {
-                    fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JSON);
+
+                // Check if this is a mobile provision file
+                if (entryPath.endsWith("embedded.mobileprovision")) {
+                    contentText = MobileProvision.parseProvisioningProfile(contentBytes);
+                    fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
+                } else if (fullPath.toString().endsWith("plist")) {
                     if (PlistUtils.isBinaryPlist(contentBytes)) {
                         contentText = PlistUtils.decodeBinaryPropertyList(contentBytes);
+                        fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JSON);
                     } else {
                         contentText = new String(contentBytes);
+                        fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
                     }
                 } else {
                     // Reset to default C syntax for other files
                     fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
                     contentText = new String(contentBytes);
                 }
-        
+
                 fileContentArea.setText(contentText);
                 fileContentArea.setCaretPosition(0);
             } catch (IOException ex) {
                 ex.printStackTrace();
+            } catch (Exception ex) {
+                // Handle other exceptions that might occur during mobile provision parsing
+                LOGGER.log(Level.SEVERE, "Error parsing mobile provision file", ex);
+                fileContentArea.setText("Error parsing mobile provision file: " + ex.getMessage());
             }
         }
     }
@@ -906,20 +966,23 @@ public class AnalysisWindow {
             functionAssistVisible = !functionAssistVisible;
             functionAssistPanel.setVisible(functionAssistVisible);
             stringsPanel.setVisible(functionAssistVisible);
+            resourceStringsPanel.setVisible(functionAssistVisible);
             closeLabel.setVisible(functionAssistVisible);
             stringsCloseLabel.setVisible(functionAssistVisible);
+            resourceStringsCloseLabel.setVisible(functionAssistVisible);
 
             if (functionAssistVisible) {
-                rightSplitPane.setDividerLocation(rightSplitPane.getWidth() - 300);  // Fixed width for both panels
-                rightVerticalSplitPane.setDividerLocation(0.5);  // Maintain 50/50 split
+                rightSplitPane.setDividerLocation(rightSplitPane.getWidth() - 300);
+                // Set equal spacing for all three panels
+                JSplitPane topSplitPane = (JSplitPane) rightVerticalSplitPane.getTopComponent();
+                topSplitPane.setDividerLocation(0.5);  // Equal split between top two panels
+                rightVerticalSplitPane.setDividerLocation(0.66);  // Give bottom panel 1/3 of space
             } else {
                 rightSplitPane.setDividerLocation(1.0);
             }
 
             mainSplitPane.revalidate();
             mainSplitPane.repaint();
-        } else {
-            System.out.println("Error: functionAssistPanel or mainSplitPane is null");
         }
     }
 
@@ -1205,5 +1268,57 @@ public class AnalysisWindow {
 
     public static Project getCurrentProject() {
         return currentProject;
+    }
+
+    // Add this new method
+    private static void populateMachoStringsPanel() {
+        if (dbHandler != null && stringsPanel != null) {
+            List<Map<String, String>> machoStrings = dbHandler.getMachoStrings();
+            
+            // Create a formatted string builder for the strings content
+            StringBuilder content = new StringBuilder();
+            content.append("<html><body style='font-family: monospace'>");
+            
+            // Add table headers
+            content.append("<table>");
+            content.append("<tr>");
+            content.append("<th style='text-align: left; padding-right: 20px'>Address</th>");
+            content.append("<th style='text-align: left; padding-right: 20px'>Value</th>");
+            content.append("<th style='text-align: left; padding-right: 20px'>Segment</th>");
+            content.append("<th style='text-align: left'>Label</th>");
+            content.append("</tr>");
+            
+            // Add table rows
+            for (Map<String, String> string : machoStrings) {
+                content.append("<tr>");
+                content.append("<td style='padding-right: 20px'>").append(string.get("address")).append("</td>");
+                content.append("<td style='padding-right: 20px'>").append(string.get("value")).append("</td>");
+                content.append("<td style='padding-right: 20px'>").append(string.get("segment")).append("</td>");
+                content.append("<td>").append(string.get("label")).append("</td>");
+                content.append("</tr>");
+            }
+            
+            content.append("</table></body></html>");
+            
+            // Update the strings panel content
+            Component[] components = stringsPanel.getComponents();
+            for (Component component : components) {
+                if (component instanceof JScrollPane) {
+                    JScrollPane scrollPane = (JScrollPane) component;
+                    Component view = scrollPane.getViewport().getView();
+                    if (view instanceof JTextArea) {
+                        JEditorPane editorPane = new JEditorPane();
+                        editorPane.setContentType("text/html");
+                        editorPane.setEditable(false);
+                        editorPane.setText(content.toString());
+                        editorPane.setBackground(null);
+                        editorPane.setCaretPosition(0);
+                        scrollPane.getVerticalScrollBar().setValue(0);
+                        scrollPane.setViewportView(editorPane);
+                        break;
+                    }
+                }
+            }
+        }
     }
 }

@@ -83,11 +83,18 @@ public class ApplicationMenu {
             KeyStroke.getKeyStroke(KeyEvent.VK_L, config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
         );
 
-        addMenuItem(windowsMenu, "Strings", e -> {
-            System.out.println("Strings menu item clicked");
+        addMenuItem(windowsMenu, "Mach-O Strings", e -> {
+            System.out.println("Mach-O Strings menu item clicked");
             AnalysisWindow.toggleFunctionAssist();
         },
             KeyStroke.getKeyStroke(KeyEvent.VK_S, config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
+        );
+
+        addMenuItem(windowsMenu, "Resource Strings", e -> {
+            System.out.println("Resource Strings menu item clicked");
+            AnalysisWindow.toggleFunctionAssist();
+        },
+            KeyStroke.getKeyStroke(KeyEvent.VK_R, config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
         );
 
         return windowsMenu;
