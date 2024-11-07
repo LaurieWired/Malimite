@@ -1,12 +1,16 @@
 package com.lauriewired.malimite.utils;
 
 import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
+import java.util.logging.Logger;
 
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreeNode;
 
 public class NodeOperations {
+    private static final Logger LOGGER = Logger.getLogger(NodeOperations.class.getName());
 
     public static String buildFullPathFromNode(TreeNode node) {
         StringBuilder fullPath = new StringBuilder();
@@ -56,5 +60,48 @@ public class NodeOperations {
         for (int i = 0; i < fileTree.getRowCount(); i++) {
             fileTree.expandRow(i);
         }
+    }
+
+    public static DefaultMutableTreeNode findInfoPlistNode(DefaultMutableTreeNode root) {
+        // Find the Files node first
+        for (int i = 0; i < root.getChildCount(); i++) {
+            DefaultMutableTreeNode filesNode = (DefaultMutableTreeNode) root.getChildAt(i);
+            
+            if (filesNode.getUserObject().toString().equals("Files")) {
+                // Look for the .app directory directly under Files
+                for (int j = 0; j < filesNode.getChildCount(); j++) {
+                    DefaultMutableTreeNode appNode = (DefaultMutableTreeNode) filesNode.getChildAt(j);
+                    if (appNode.getUserObject().toString().endsWith(".app/")) {
+                        // Look for Info.plist directly under the .app directory
+                        for (int k = 0; k < appNode.getChildCount(); k++) {
+                            DefaultMutableTreeNode child = (DefaultMutableTreeNode) appNode.getChildAt(k);
+                            if (child.getUserObject().toString().equals("Info.plist")) {
+                                return child;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    public static void populateClassesNode(DefaultMutableTreeNode classesRootNode, 
+            Map<String, List<String>> classesAndFunctions) {
+        LOGGER.info("Populating classes tree...");
+        classesRootNode.removeAllChildren();
+        LOGGER.info("Retrieved " + classesAndFunctions.size() + " classes from database");
+
+        for (Map.Entry<String, List<String>> entry : classesAndFunctions.entrySet()) {
+            String className = entry.getKey();
+            List<String> functions = entry.getValue();
+            LOGGER.fine("Adding class: " + className + " with " + functions.size() + " functions");
+            DefaultMutableTreeNode classNode = new DefaultMutableTreeNode(className);
+            for (String function : functions) {
+                classNode.add(new DefaultMutableTreeNode(function));
+            }
+            classesRootNode.add(classNode);
+        }
+        LOGGER.info("Finished populating classes tree");
     }
 }

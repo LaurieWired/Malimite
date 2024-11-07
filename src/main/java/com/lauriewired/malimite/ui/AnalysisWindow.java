@@ -1,15 +1,54 @@
 package com.lauriewired.malimite.ui;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JDialog;
+import javax.swing.JEditorPane;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JProgressBar;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextPane;
+import javax.swing.JToggleButton;
+import javax.swing.JTree;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
+import javax.swing.DefaultListModel;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
-import java.awt.*;
+
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+import java.awt.event.MouseEvent;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
+
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,26 +56,24 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseAdapter;
 
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import com.lauriewired.malimite.configuration.Config;
+import com.lauriewired.malimite.configuration.Project;
 import com.lauriewired.malimite.database.SQLiteDBHandler;
 import com.lauriewired.malimite.decompile.GhidraProject;
 import com.lauriewired.malimite.files.InfoPlist;
 import com.lauriewired.malimite.files.Macho;
 import com.lauriewired.malimite.files.MobileProvision;
+import com.lauriewired.malimite.tools.AIBackend;
+import com.lauriewired.malimite.tools.AIBackend.Model;
 import com.lauriewired.malimite.utils.FileProcessing;
 import com.lauriewired.malimite.utils.NodeOperations;
 import com.lauriewired.malimite.utils.PlistUtils;
-import com.lauriewired.malimite.configuration.Project;
-import com.lauriewired.malimite.tools.AIBackend;
-import com.lauriewired.malimite.tools.AIBackend.Model;
-import java.util.Arrays;
+import com.lauriewired.malimite.utils.ResourceParser;
 
 public class AnalysisWindow {
     private static final Logger LOGGER = Logger.getLogger(AnalysisWindow.class.getName());
@@ -107,11 +144,8 @@ public class AnalysisWindow {
 
             loadAndAnalyzeFile(file, filesRootNode, classesRootNode);
             
-            Project project = updateFileInfo(new File(currentFilePath), projectMacho);
-            infoDisplay.setText(project.generateInfoString());
-            
             // Select Info.plist node by default
-            DefaultMutableTreeNode infoNode = findInfoPlistNode((DefaultMutableTreeNode) treeModel.getRoot());
+            DefaultMutableTreeNode infoNode = NodeOperations.findInfoPlistNode((DefaultMutableTreeNode) treeModel.getRoot());
 
             if (infoNode != null) {
                 TreePath infoPath = new TreePath(treeModel.getPathToRoot(infoNode));
@@ -431,7 +465,7 @@ public class AnalysisWindow {
 
         // Create vertical split pane for all three panels
         rightVerticalSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        rightVerticalSplitPane.setResizeWeight(0.33); // Give each panel equal space
+        rightVerticalSplitPane.setResizeWeight(0.67); // Give top section 67% of space
 
         // First split: Strings and Resource Strings
         JSplitPane topSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, stringsPanel, resourceStringsPanel);
@@ -445,6 +479,11 @@ public class AnalysisWindow {
         rightSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, rightPanel, rightVerticalSplitPane);
         rightSplitPane.setDividerLocation(1.0);
         rightSplitPane.setResizeWeight(1.0);
+
+        // Set initial sizes for the panels
+        stringsPanel.setPreferredSize(new Dimension(300, 200));
+        resourceStringsPanel.setPreferredSize(new Dimension(300, 200));
+        functionAssistPanel.setPreferredSize(new Dimension(300, 200));
 
         // Combine left and right panels
         mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightSplitPane);
@@ -510,32 +549,6 @@ public class AnalysisWindow {
         return contentPanel;
     }      
 
-    private static Project updateFileInfo(File file, Macho macho) {
-        Project project = new Project();
-        project.setFileName(file.getName());
-        project.setFilePath(file.getAbsolutePath());
-        project.setFileSize(file.length());
-        
-        try {
-            project.setIsMachO(true);
-            project.setMachoInfo(macho);
-            project.setIsSwift(macho.isSwift());
-            
-            if (macho.isUniversalBinary()) {
-                project.setFileType("Universal Mach-O Binary");
-            } else {
-                project.setFileType("Single Architecture Mach-O");
-            }
-        } catch (Exception ex) {
-            project.setFileType("Unknown or unsupported file format");
-            project.setIsMachO(false);
-            LOGGER.warning("Error reading file format: " + ex.getMessage());
-        }
-
-        currentProject = project;
-        return project;
-    }
-
     private static void loadAndAnalyzeFile(File file, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
         LOGGER.info("Starting analysis on " + file.getName());
         fileNameLabel.setText(file.getName());
@@ -547,32 +560,16 @@ public class AnalysisWindow {
         LOGGER.info("Beginning file unzip and analysis process");
         unzipAndLoadToTree(file, filesRootNode, classesRootNode);
         
+        // Update this line to use FileProcessing
+        Project project = FileProcessing.updateFileInfo(new File(currentFilePath), projectMacho);
+        currentProject = project;  // Keep track of current project
+        infoDisplay.setText(project.generateInfoString());
+        
         // Add this line to populate the strings panel after loading the tree
         populateMachoStringsPanel();
-    }
 
-    private static DefaultMutableTreeNode findInfoPlistNode(DefaultMutableTreeNode root) {
-        // Find the Files node first
-        for (int i = 0; i < root.getChildCount(); i++) {
-            DefaultMutableTreeNode filesNode = (DefaultMutableTreeNode) root.getChildAt(i);
-            
-            if (filesNode.getUserObject().toString().equals("Files")) {
-                // Look for the .app directory directly under Files
-                for (int j = 0; j < filesNode.getChildCount(); j++) {
-                    DefaultMutableTreeNode appNode = (DefaultMutableTreeNode) filesNode.getChildAt(j);
-                    if (appNode.getUserObject().toString().endsWith(".app/")) {
-                        // Look for Info.plist directly under the .app directory
-                        for (int k = 0; k < appNode.getChildCount(); k++) {
-                            DefaultMutableTreeNode child = (DefaultMutableTreeNode) appNode.getChildAt(k);
-                            if (child.getUserObject().toString().equals("Info.plist")) {
-                                return child;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return null;
+        // Add this line after populating the strings panel
+        populateResourceStringsPanel();
     }
 
     private static void unzipAndLoadToTree(File fileToUnzip, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
@@ -589,7 +586,7 @@ public class AnalysisWindow {
                     appNode = new DefaultMutableTreeNode(entry.getName());
                     filesRootNode.add(appNode);
                 } else if (appNode != null && entry.getName().startsWith(appNode.toString())) {
-                    handleEntry(entry, appNode, zipIn);
+                    handleEntryWithoutResources(entry, appNode, zipIn);
                 }
                 zipIn.closeEntry();
                 entry = zipIn.getNextEntry();
@@ -598,6 +595,9 @@ public class AnalysisWindow {
 
             initializeProject();
             populateClassesNode(classesRootNode);
+            
+            // Now process all resources in a separate pass
+            processResourceStrings(fileToUnzip, appNode);
     
             treeModel.reload();
             NodeOperations.collapseAllTreeNodes(fileTree);
@@ -607,22 +607,8 @@ public class AnalysisWindow {
     }
     
     private static void populateClassesNode(DefaultMutableTreeNode classesRootNode) {
-        LOGGER.info("Populating classes tree...");
-        classesRootNode.removeAllChildren();
         Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
-        LOGGER.info("Retrieved " + classesAndFunctions.size() + " classes from database");
-
-        for (Map.Entry<String, List<String>> entry : classesAndFunctions.entrySet()) {
-            String className = entry.getKey();
-            List<String> functions = entry.getValue();
-            LOGGER.fine("Adding class: " + className + " with " + functions.size() + " functions");
-            DefaultMutableTreeNode classNode = new DefaultMutableTreeNode(className);
-            for (String function : functions) {
-                classNode.add(new DefaultMutableTreeNode(function));
-            }
-            classesRootNode.add(classNode);
-        }
-        LOGGER.info("Finished populating classes tree");
+        NodeOperations.populateClassesNode(classesRootNode, classesAndFunctions);
     }
 
     private static void initializeProject() {
@@ -729,6 +715,11 @@ public class AnalysisWindow {
                     dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
                         projectMacho.getMachoExecutableName() + "_malimite.db");
                 }
+
+                // After dbHandler is initialized, set it in ResourceParser
+                System.out.println("LAURIE setting dbHandler in ResourceParser");
+                ResourceParser.setDatabaseHandler(dbHandler);
+
                 return null;
             }
             
@@ -782,30 +773,74 @@ public class AnalysisWindow {
         return null;
     }
     
-    private static void handleEntry(ZipEntry entry, DefaultMutableTreeNode appNode, ZipInputStream zipIn) throws IOException {
+    private static void handleEntryWithoutResources(ZipEntry entry, DefaultMutableTreeNode appNode, ZipInputStream zipIn) throws IOException {
         String relativePath = entry.getName().substring(appNode.toString().length());
         DefaultMutableTreeNode currentNode;
-    
+
+        // Read the content once into a byte array
+        byte[] contentBytes = null;
+        if (!entry.isDirectory()) {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int len;
+            while ((len = zipIn.read(buffer)) > 0) {
+                outputStream.write(buffer, 0, len);
+            }
+            contentBytes = outputStream.toByteArray();
+        }
+
         if (relativePath.equals("Info.plist")) {
             currentNode = new DefaultMutableTreeNode("Info.plist");
             appNode.add(currentNode);
             fileEntriesMap.put(NodeOperations.buildFullPathFromNode(currentNode), entry.getName());
-            infoPlist = new InfoPlist(currentNode, currentFilePath, fileEntriesMap);
-            updateBundleIdDisplay(infoPlist.getBundleIdentifier());
+
+            // Process Info.plist content
+            if (contentBytes != null) {
+                // Process as Info.plist
+                infoPlist = new InfoPlist(currentNode, currentFilePath, fileEntriesMap);
+                updateBundleIdDisplay(infoPlist.getBundleIdentifier());
+            }
         } else {
             // Create or get the "Resources" node and add other files to it
             currentNode = NodeOperations.addOrGetNode(appNode, "Resources", true);
-    
+
             // Skip the first part of the path if it's a directory
             String[] pathParts = relativePath.split("/");
             for (int i = (entry.isDirectory() ? 1 : 0); i < pathParts.length; i++) {
                 boolean isDirectory = i < pathParts.length - 1 || entry.isDirectory();
                 currentNode = NodeOperations.addOrGetNode(currentNode, pathParts[i], isDirectory);
-    
+
                 if (!isDirectory) {
                     fileEntriesMap.put(NodeOperations.buildFullPathFromNode(currentNode), entry.getName());
                 }
             }
+        }
+    }
+
+    private static void processResourceStrings(File fileToUnzip, DefaultMutableTreeNode appNode) {
+        try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(fileToUnzip))) {
+            ZipEntry entry = zipIn.getNextEntry();
+            
+            while (entry != null) {
+                if (!entry.isDirectory() && appNode != null && entry.getName().startsWith(appNode.toString())) {
+                    // Check if this is a resource file and process it
+                    if (ResourceParser.isResource(entry.getName())) {
+                        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                        byte[] buffer = new byte[4096];
+                        int len;
+                        while ((len = zipIn.read(buffer)) > 0) {
+                            outputStream.write(buffer, 0, len);
+                        }
+                        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray())) {
+                            ResourceParser.parseResourceForStrings(inputStream, entry.getName());
+                        }
+                    }
+                }
+                zipIn.closeEntry();
+                entry = zipIn.getNextEntry();
+            }
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Error processing resource strings", e);
         }
     }
 
@@ -891,7 +926,7 @@ public class AnalysisWindow {
     private static void displayClassDecompilation(String className) {
         try {
             // Update the function list in the function assist panel
-            updateFunctionList(className);
+            FileProcessing.updateFunctionList(functionAssistPanel, dbHandler, className);
             
             // Get all functions for this class from the map we already have
             Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
@@ -929,7 +964,7 @@ public class AnalysisWindow {
     private static void displayFunctionDecompilation(String functionName, String className) {
         try {
             // Update the function list in the function assist panel
-            updateFunctionList(className);
+            FileProcessing.updateFunctionList(functionAssistPanel, dbHandler, className);
             
             String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className);
             if (functionDecompilation != null && !functionDecompilation.isEmpty()) {
@@ -983,31 +1018,6 @@ public class AnalysisWindow {
 
             mainSplitPane.revalidate();
             mainSplitPane.repaint();
-        }
-    }
-
-    // Add this method to update the function list when a class is selected
-    private static void updateFunctionList(String className) {
-        if (functionAssistPanel != null) {
-            JList<?> functionList = (JList<?>) ((JScrollPane) ((JPanel) functionAssistPanel
-                .getComponent(1)).getComponent(1)).getViewport().getView();
-            DefaultListModel<String> model = (DefaultListModel<String>) functionList.getModel();
-            model.clear();
-            
-            // Get functions for the selected class
-            Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
-            List<String> functions = classesAndFunctions.get(className);
-            
-            if (functions != null) {
-                for (String function : functions) {
-                    model.addElement(function);
-                }
-            }
-            
-            // Reset "Select All" checkbox
-            JCheckBox selectAllBox = (JCheckBox) ((JPanel) functionAssistPanel
-                .getComponent(1)).getComponent(0);
-            selectAllBox.setSelected(false);
         }
     }
 
@@ -1205,27 +1215,6 @@ public class AnalysisWindow {
         }
     }
 
-    private static String extractFunctionName(String functionCode) {
-        // Basic function name extraction - you might need to make this more robust
-        try {
-            String[] lines = functionCode.split("\n");
-            for (String line : lines) {
-                line = line.trim();
-                if (line.contains("func ")) {
-                    // Extract name between "func " and "("
-                    int startIndex = line.indexOf("func ") + 5;
-                    int endIndex = line.indexOf("(");
-                    if (endIndex > startIndex) {
-                        return line.substring(startIndex, endIndex).trim();
-                    }
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Error extracting function name", e);
-        }
-        return null;
-    }
-
     private static boolean isInClassesTree(TreePath path) {
         return path.getPathCount() > 1 && 
                ((DefaultMutableTreeNode) path.getPathComponent(1)).getUserObject().toString().equals("Classes");
@@ -1275,23 +1264,18 @@ public class AnalysisWindow {
         if (dbHandler != null && stringsPanel != null) {
             List<Map<String, String>> machoStrings = dbHandler.getMachoStrings();
             
-            // Create a formatted string builder for the strings content
             StringBuilder content = new StringBuilder();
             content.append("<html><body style='font-family: monospace'>");
             
-            // Add table headers
             content.append("<table>");
             content.append("<tr>");
-            content.append("<th style='text-align: left; padding-right: 20px'>Address</th>");
             content.append("<th style='text-align: left; padding-right: 20px'>Value</th>");
             content.append("<th style='text-align: left; padding-right: 20px'>Segment</th>");
             content.append("<th style='text-align: left'>Label</th>");
             content.append("</tr>");
             
-            // Add table rows
             for (Map<String, String> string : machoStrings) {
                 content.append("<tr>");
-                content.append("<td style='padding-right: 20px'>").append(string.get("address")).append("</td>");
                 content.append("<td style='padding-right: 20px'>").append(string.get("value")).append("</td>");
                 content.append("<td style='padding-right: 20px'>").append(string.get("segment")).append("</td>");
                 content.append("<td>").append(string.get("label")).append("</td>");
@@ -1300,23 +1284,65 @@ public class AnalysisWindow {
             
             content.append("</table></body></html>");
             
-            // Update the strings panel content
-            Component[] components = stringsPanel.getComponents();
-            for (Component component : components) {
-                if (component instanceof JScrollPane) {
-                    JScrollPane scrollPane = (JScrollPane) component;
-                    Component view = scrollPane.getViewport().getView();
-                    if (view instanceof JTextArea) {
-                        JEditorPane editorPane = new JEditorPane();
-                        editorPane.setContentType("text/html");
-                        editorPane.setEditable(false);
-                        editorPane.setText(content.toString());
-                        editorPane.setBackground(null);
-                        editorPane.setCaretPosition(0);
-                        scrollPane.getVerticalScrollBar().setValue(0);
-                        scrollPane.setViewportView(editorPane);
-                        break;
-                    }
+            // Update panel content (same as before)
+            updatePanelContent(stringsPanel, content.toString());
+        }
+    }
+
+    // Add this new method to populate the resource strings panel
+    private static void populateResourceStringsPanel() {
+        if (dbHandler != null && resourceStringsPanel != null) {
+            List<Map<String, String>> resourceStrings = dbHandler.getResourceStrings();
+            
+            StringBuilder content = new StringBuilder();
+            content.append("<html><body style='font-family: monospace'>");
+            
+            // Add CSS to prevent text wrapping
+            content.append("<table style='white-space: nowrap'>");
+            content.append("<tr>");
+            content.append("<th style='text-align: left; padding-right: 20px'>Value</th>");
+            content.append("<th style='text-align: left; padding-right: 20px'>File</th>");
+            content.append("<th style='text-align: left'>Type</th>");
+            content.append("</tr>");
+            
+            for (Map<String, String> string : resourceStrings) {
+                String value = string.get("value");
+                String truncatedValue = value.length() > 30 ? value.substring(0, 30) + "..." : value;
+                
+                // Extract just the filename from the full path
+                String fullPath = string.get("resourceId");
+                String fileName = fullPath.substring(fullPath.lastIndexOf('/') + 1);
+                
+                content.append("<tr>");
+                content.append("<td style='padding-right: 20px; white-space: nowrap'>").append(truncatedValue).append("</td>");
+                content.append("<td style='padding-right: 20px; white-space: nowrap'>").append(fileName).append("</td>");
+                content.append("<td style='white-space: nowrap'>").append(string.get("type")).append("</td>");
+                content.append("</tr>");
+            }
+            
+            content.append("</table></body></html>");
+            
+            updatePanelContent(resourceStringsPanel, content.toString());
+        }
+    }
+
+    // Helper method to reduce code duplication
+    private static void updatePanelContent(JPanel panel, String content) {
+        Component[] components = panel.getComponents();
+        for (Component component : components) {
+            if (component instanceof JScrollPane) {
+                JScrollPane scrollPane = (JScrollPane) component;
+                Component view = scrollPane.getViewport().getView();
+                if (view instanceof JTextArea) {
+                    JEditorPane editorPane = new JEditorPane();
+                    editorPane.setContentType("text/html");
+                    editorPane.setEditable(false);
+                    editorPane.setText(content);
+                    editorPane.setBackground(null);
+                    editorPane.setCaretPosition(0);
+                    scrollPane.getVerticalScrollBar().setValue(0);
+                    scrollPane.setViewportView(editorPane);
+                    break;
                 }
             }
         }

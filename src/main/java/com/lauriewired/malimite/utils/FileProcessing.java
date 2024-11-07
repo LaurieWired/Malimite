@@ -19,12 +19,18 @@ import java.util.ArrayList;
 import java.util.List;
 import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
+import java.util.logging.Logger;
+import com.lauriewired.malimite.files.Macho;
+import com.lauriewired.malimite.database.SQLiteDBHandler;
 
 import com.lauriewired.malimite.configuration.Project;
+import javax.swing.*;
+import java.util.Map;
 
 public class FileProcessing {
     private static String configDirectory = ".";
     private static final String PROJECTS_FILENAME = "malimite.projects";
+    private static final Logger LOGGER = Logger.getLogger(FileProcessing.class.getName());
 
     public static void readStream(InputStream stream) {
         new Thread(() -> {
@@ -237,5 +243,54 @@ public class FileProcessing {
     // Update to use configDirectory
     private static String getProjectsFilePath() {
         return configDirectory + File.separator + PROJECTS_FILENAME;
+    }
+
+    public static Project updateFileInfo(File file, Macho macho) {
+        Project project = new Project();
+        project.setFileName(file.getName());
+        project.setFilePath(file.getAbsolutePath());
+        project.setFileSize(file.length());
+        
+        try {
+            project.setIsMachO(true);
+            project.setMachoInfo(macho);
+            project.setIsSwift(macho.isSwift());
+            
+            if (macho.isUniversalBinary()) {
+                project.setFileType("Universal Mach-O Binary");
+            } else {
+                project.setFileType("Single Architecture Mach-O");
+            }
+        } catch (Exception ex) {
+            project.setFileType("Unknown or unsupported file format");
+            project.setIsMachO(false);
+            LOGGER.warning("Error reading file format: " + ex.getMessage());
+        }
+
+        return project;
+    }
+
+    public static void updateFunctionList(JPanel functionAssistPanel, SQLiteDBHandler dbHandler, String className) {
+        if (functionAssistPanel != null) {
+            JList<?> functionList = (JList<?>) ((JScrollPane) ((JPanel) functionAssistPanel
+                .getComponent(1)).getComponent(1)).getViewport().getView();
+            DefaultListModel<String> model = (DefaultListModel<String>) functionList.getModel();
+            model.clear();
+            
+            // Get functions for the selected class
+            Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
+            List<String> functions = classesAndFunctions.get(className);
+            
+            if (functions != null) {
+                for (String function : functions) {
+                    model.addElement(function);
+                }
+            }
+            
+            // Reset "Select All" checkbox
+            JCheckBox selectAllBox = (JCheckBox) ((JPanel) functionAssistPanel
+                .getComponent(1)).getComponent(0);
+            selectAllBox.setSelected(false);
+        }
     }
 }
