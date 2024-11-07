@@ -77,11 +77,21 @@ public class PreferencesDialog {
         JButton cancelButton = new JButton("Cancel");
 
         saveButton.addActionListener(e -> {
-            config.setTheme((String) themeComboBox.getSelectedItem());
+            String newTheme = (String) themeComboBox.getSelectedItem();
+            String currentTheme = config.getTheme();
+            
+            // Save all preferences
+            config.setTheme(newTheme);
             config.setGhidraPath(ghidraPathField.getText());
             config.setOpenAIApiKey(new String(openaiKeyField.getPassword()));
             config.setClaudeApiKey(new String(claudeKeyField.getPassword()));
             config.saveConfig();
+            
+            // Apply theme change if it was modified
+            if (!newTheme.equals(currentTheme)) {
+                Malimite.updateTheme(newTheme);
+            }
+            
             dialog.dispose();
         });        
 

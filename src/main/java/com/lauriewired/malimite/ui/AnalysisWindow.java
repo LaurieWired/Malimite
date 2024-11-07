@@ -234,8 +234,8 @@ public class AnalysisWindow {
         // Create a panel for the selected file label
         JPanel fileLabelPanel = new JPanel(new BorderLayout());
         fileLabelPanel.add(selectedFileLabel, BorderLayout.CENTER);
-        // Add a thinner, semi-transparent border just to the top and bottom
-        fileLabelPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 1, 0, new java.awt.Color(200, 200, 200, 128)));
+        // Add a thin, semi-transparent border just to the bottom
+        fileLabelPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 0, new java.awt.Color(200, 200, 200, 64)));
 
         // Add this panel to the top of the content area
         JPanel rightPanel = new JPanel(new BorderLayout());
