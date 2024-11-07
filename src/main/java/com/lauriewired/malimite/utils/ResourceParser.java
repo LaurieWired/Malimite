@@ -5,11 +5,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.logging.Logger;
 import com.lauriewired.malimite.files.MobileProvision;
 import com.lauriewired.malimite.database.SQLiteDBHandler;
 public class ResourceParser {
 
     private static SQLiteDBHandler dbHandler;
+    private static final Logger LOGGER = Logger.getLogger(ResourceParser.class.getName());
 
     public static void setDatabaseHandler(SQLiteDBHandler handler) {
         dbHandler = handler;
@@ -24,17 +26,18 @@ public class ResourceParser {
         Pattern.compile(".*\\.mobileprovision$"),       // Provisioning profiles
         Pattern.compile(".*\\.storyboardc$"),           // Interface builder files
         Pattern.compile(".*\\.xcassets$"),              // Asset catalogs
-        Pattern.compile(".*\\.nib$")                    // Interface builder files
+        Pattern.compile(".*\\.nib$"),                   // Interface builder files
+        Pattern.compile(".*\\.xib$")                    // Interface builder files (newly added)
     );
 
     /**
      * Checks if a file name matches any predefined resource pattern.
      */
     public static boolean isResource(String fileName) {
-        System.out.println("LAURIE checking if " + fileName + " is a resource");
+        LOGGER.fine("Checking if file is a resource: " + fileName);
         for (Pattern pattern : RESOURCE_PATTERNS) {
             if (pattern.matcher(fileName).matches()) {
-                System.out.println("LAURIE YES " + fileName + " is a resource");
+                LOGGER.fine("File identified as resource: " + fileName);
                 return true;
             }
         }
@@ -56,20 +59,19 @@ public class ResourceParser {
             }
             byte[] contentBytes = buffer.toByteArray();
 
-            // Add debug print for file processing
-            System.out.println("Processing file: " + fileName);
+            LOGGER.info("Processing file: " + fileName);
 
             // Handle different file types
             String content;
             if (fileName.endsWith(".plist")) {
                 content = handlePlist(contentBytes);
-                System.out.println("Processed as plist file");
+                LOGGER.fine("Processed as plist file");
             } else if (fileName.endsWith("embedded.mobileprovision")) {
                 content = MobileProvision.extractEmbeddedXML(contentBytes);
-                System.out.println("Processed as mobileprovision file");
+                LOGGER.fine("Processed as mobileprovision file");
             } else {
                 content = new String(contentBytes, StandardCharsets.UTF_8);
-                System.out.println("Processed as regular text file");
+                LOGGER.fine("Processed as regular text file");
             }
 
             // Process the content line by line
@@ -78,34 +80,28 @@ public class ResourceParser {
                 int lineCount = 0;
                 while ((line = reader.readLine()) != null) {
                     lineCount++;
-                    System.out.println("Line " + lineCount + ": " + line);
                     
                     if (!line.trim().isEmpty()) {
-                        System.out.println("  -> Line is not empty");
                         // Split the line into segments of printable characters
                         String[] segments = line.split("[^\\p{Print}]+");
                         for (String segment : segments) {
-                            // Only process segments that are 4 characters or longer
-                            if (!segment.isEmpty() && segment.length() >= 4) {
-                                System.out.println("  -> Found printable segment: " + segment);
+                            // Remove whitespace and check if length is more than 4
+                            String trimmedSegment = segment.trim();
+                            if (!trimmedSegment.isEmpty() && trimmedSegment.replaceAll("\\s+", "").length() > 4) {
                                 if (dbHandler != null) {
                                     dbHandler.insertResourceString(fileName, segment, getResourceType(fileName));
-                                    System.out.println("  -> INSERTED: " + segment);
-                                } else {
-                                    System.out.println("  -> NOT INSERTED: dbHandler is null");
+                                    LOGGER.fine("Inserted resource string: " + segment);
                                 }
                             }
                         }
-                    } else {
-                        System.out.println("  -> Empty line - SKIPPED");
                     }
                 }
-                System.out.println("Total lines processed: " + lineCount);
+                LOGGER.info("Completed processing " + lineCount + " lines");
             }
         } catch (IOException e) {
-            System.err.println("Error reading file: " + e.getMessage());
+            LOGGER.severe("Error reading file: " + e.getMessage());
         } catch (Exception e) {
-            System.err.println("Error processing file: " + e.getMessage());
+            LOGGER.severe("Error processing file: " + e.getMessage());
         }
     }
 

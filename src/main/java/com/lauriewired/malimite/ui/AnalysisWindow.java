@@ -102,6 +102,7 @@ public class AnalysisWindow {
     private static boolean functionAssistVisible = false;
     private static JLabel bundleIdValue;
     private static JLabel closeLabel;
+    private static JLabel selectedFileLabel;
 
     private static JButton saveButton;
     private static boolean isEditing = false;
@@ -226,9 +227,19 @@ public class AnalysisWindow {
         bundleIdPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         bundleIdPanel.add(bundleIdValue, BorderLayout.CENTER);
     
-        // Create right panel to hold bundle ID and content
+        // Initialize the selected file label and set some padding
+        selectedFileLabel = new JLabel("No file selected");
+        selectedFileLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+
+        // Create a panel for the selected file label
+        JPanel fileLabelPanel = new JPanel(new BorderLayout());
+        fileLabelPanel.add(selectedFileLabel, BorderLayout.CENTER);
+        // Add a thinner, semi-transparent border just to the top and bottom
+        fileLabelPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 1, 0, new java.awt.Color(200, 200, 200, 128)));
+
+        // Add this panel to the top of the content area
         JPanel rightPanel = new JPanel(new BorderLayout());
-        rightPanel.add(bundleIdPanel, BorderLayout.NORTH);
+        rightPanel.add(fileLabelPanel, BorderLayout.NORTH);
         rightPanel.add(contentScrollPane, BorderLayout.CENTER);
     
         // Create function assist panel with close label
@@ -501,7 +512,8 @@ public class AnalysisWindow {
         
         // Add save button to the right panel, above the content
         JPanel rightTopPanel = new JPanel(new BorderLayout());
-        rightTopPanel.add(bundleIdPanel, BorderLayout.CENTER);
+        rightTopPanel.add(bundleIdPanel, BorderLayout.NORTH);
+        rightTopPanel.add(fileLabelPanel, BorderLayout.CENTER);
         rightTopPanel.add(saveButton, BorderLayout.EAST);
         rightPanel.add(rightTopPanel, BorderLayout.NORTH);
 
@@ -852,6 +864,8 @@ public class AnalysisWindow {
 
         TreePath path = e.getPath();
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+
+        selectedFileLabel.setText(node.getUserObject().toString());
     
         // Check if we're in the Classes root
         if (isInClassesTree(path)) {
@@ -1297,7 +1311,6 @@ public class AnalysisWindow {
             StringBuilder content = new StringBuilder();
             content.append("<html><body style='font-family: monospace'>");
             
-            // Add CSS to prevent text wrapping
             content.append("<table style='white-space: nowrap'>");
             content.append("<tr>");
             content.append("<th style='text-align: left; padding-right: 20px'>Value</th>");
@@ -1307,7 +1320,14 @@ public class AnalysisWindow {
             
             for (Map<String, String> string : resourceStrings) {
                 String value = string.get("value");
-                String truncatedValue = value.length() > 30 ? value.substring(0, 30) + "..." : value;
+                // Escape HTML special characters
+                value = value.replace("&", "&amp;")
+                           .replace("<", "&lt;")
+                           .replace(">", "&gt;")
+                           .replace("\"", "&quot;")
+                           .replace("'", "&#39;");
+                
+                String truncatedValue = value.length() > 60 ? value.substring(0, 60) + "..." : value;
                 
                 // Extract just the filename from the full path
                 String fullPath = string.get("resourceId");
