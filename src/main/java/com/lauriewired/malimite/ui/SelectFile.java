@@ -207,32 +207,37 @@ public class SelectFile {
         
         if (newIndex >= 0 && newIndex < fileOrder.size()) {
             String newFilePath = fileOrder.get(newIndex);
-            setActiveFile(newFilePath);
+            setActiveFile(newFilePath); // Sets the new active file
+    
+            // Ensure this tab is visible in the viewport
             ensureTabVisible(newIndex);
+    
             // Force content update in AnalysisWindow
             AnalysisWindow.showFileContent(newFilePath);
         }
-    }
+    }    
 
     private static void ensureTabVisible(int index) {
+        if (index < 0 || index >= fileTabsPanel.getComponentCount()) return;
+    
         Component tab = fileTabsPanel.getComponent(index);
         int tabLeft = tab.getX();
         int tabRight = tabLeft + tab.getWidth();
         int visibleWidth = fileTabsPanel.getParent().getWidth() - leftArrow.getWidth() - rightArrow.getWidth();
-        
+    
         if (tabLeft < -scrollPosition) {
-            // Scroll left to make tab visible
+            // Scroll left to make the tab visible
             scrollPosition = -tabLeft;
         } else if (tabRight > -scrollPosition + visibleWidth) {
-            // Scroll right to make tab visible
+            // Scroll right to make the tab visible
             scrollPosition = -(tabRight - visibleWidth);
         }
-        
-        // Apply scroll position
+    
+        // Apply the scroll position to each tab component
         for (Component comp : fileTabsPanel.getComponents()) {
-            comp.setLocation(-scrollPosition, comp.getY());
+            comp.setLocation(comp.getX() - scrollPosition, comp.getY());
         }
-        
+    
         fileTabsPanel.revalidate();
         fileTabsPanel.repaint();
     }

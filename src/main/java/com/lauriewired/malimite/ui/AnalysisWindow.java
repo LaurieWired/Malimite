@@ -180,7 +180,7 @@ public class AnalysisWindow {
 
     private static JPanel setupUIComponents() {
         fileNameLabel = new JLabel("Analyzing " + currentFilePath);
-        fileNameLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        fileNameLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 10, 10));
     
         DefaultMutableTreeNode hiddenRootNode = new DefaultMutableTreeNode("Hidden");
         treeModel = new DefaultTreeModel(hiddenRootNode);
@@ -275,16 +275,16 @@ public class AnalysisWindow {
         bundleIdValue.setFont(bundleIdValue.getFont().deriveFont(Font.BOLD));
     
         JPanel bundleIdPanel = new JPanel(new BorderLayout());
-        bundleIdPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        bundleIdPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 10, 5));
         bundleIdPanel.add(bundleIdValue, BorderLayout.CENTER);
 
-        // Create a panel for the selected file label
-        JPanel fileLabelPanel = new JPanel(new BorderLayout());
-        
         // Create a panel to hold both the label and tabs
         JPanel labelAndTabsPanel = new JPanel(new BorderLayout());
+        labelAndTabsPanel.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, javax.swing.UIManager.getColor("Separator.foreground")));
         labelAndTabsPanel.add(SelectFile.getFileTabsPanel(), BorderLayout.CENTER);
-        
+
+        // Create a panel to hold both the label and tabs
+        JPanel fileLabelPanel = new JPanel(new BorderLayout());
         fileLabelPanel.add(labelAndTabsPanel, BorderLayout.CENTER);
 
         // Add this panel to the top of the content area
