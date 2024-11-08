@@ -29,17 +29,12 @@ import javax.swing.event.TreeSelectionEvent;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
-
+import javax.swing.Timer;
+import java.awt.event.ActionListener;
 import java.awt.BorderLayout;
 import java.awt.Component;
-import java.awt.Cursor;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Font;
-import java.awt.Frame;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
+import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 import java.io.ByteArrayInputStream;
@@ -75,6 +70,15 @@ import com.lauriewired.malimite.utils.NodeOperations;
 import com.lauriewired.malimite.utils.PlistUtils;
 import com.lauriewired.malimite.utils.ResourceParser;
 
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+
 public class AnalysisWindow {
     private static final Logger LOGGER = Logger.getLogger(AnalysisWindow.class.getName());
 
@@ -102,7 +106,6 @@ public class AnalysisWindow {
     private static boolean functionAssistVisible = false;
     private static JLabel bundleIdValue;
     private static JLabel closeLabel;
-    private static JLabel selectedFileLabel;
 
     private static JButton saveButton;
     private static boolean isEditing = false;
@@ -136,6 +139,8 @@ public class AnalysisWindow {
             currentFilePath = file.getAbsolutePath();
             fileEntriesMap = new HashMap<>();
 
+            SelectFile.clear();
+
             JPanel contentPanel = setupUIComponents();
             analysisFrame.getContentPane().add(contentPanel, BorderLayout.CENTER);
 
@@ -152,6 +157,7 @@ public class AnalysisWindow {
                 TreePath infoPath = new TreePath(treeModel.getPathToRoot(infoNode));
                 fileTree.setSelectionPath(infoPath);
                 fileTree.scrollPathToVisible(infoPath);
+                SelectFile.addFile(infoPath);
             }
             
             analysisFrame.setVisible(true);
@@ -185,7 +191,52 @@ public class AnalysisWindow {
     
         fileTree = new JTree(treeModel);
         fileTree.setRootVisible(false);
-        fileTree.addTreeSelectionListener(AnalysisWindow::displaySelectedFileContent);
+        fileTree.addMouseListener(new MouseAdapter() {
+            private static final int DOUBLE_CLICK_DELAY = 250; // milliseconds
+            private Timer singleClickTimer;
+        
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                TreePath path = fileTree.getPathForLocation(e.getX(), e.getY());
+                if (path == null || path.getLastPathComponent() == null) {
+                    return;
+                }
+                
+                DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        
+                // Check if it's a double-click
+                if (e.getClickCount() == 2) {
+                    // If double-click, cancel the single-click timer and execute double-click action
+                    if (singleClickTimer != null && singleClickTimer.isRunning()) {
+                        singleClickTimer.stop();
+                    }
+                    System.out.println("double click");
+                    if (node.isLeaf()) {
+                        SelectFile.addFile(path);
+                        displaySelectedFileContent(new TreeSelectionEvent(fileTree, path, false, null, null));
+                    }
+                } else if (e.getClickCount() == 1) {
+                    // Start a timer for single-click action
+                    singleClickTimer = new Timer(DOUBLE_CLICK_DELAY, new ActionListener() {
+                        @Override
+                        public void actionPerformed(ActionEvent evt) {
+                            System.out.println("single click");
+                            displaySelectedFileContent(new TreeSelectionEvent(fileTree, path, false, null, null));
+                            
+                            // Check if the file is already open first
+                            if (SelectFile.isFileOpen(path)) {
+                                SelectFile.handleNodeClick(path);
+                            } else if (node.isLeaf() || isInClassesTree(path)) {
+                                SelectFile.replaceActiveFile(path);
+                            }
+                        }
+                    });
+                    singleClickTimer.setRepeats(false);
+                    singleClickTimer.start();
+                }
+            }
+        });
+        
         JScrollPane treeScrollPane = new JScrollPane(fileTree);
     
         // Initialize RSyntaxTextArea with syntax highlighting
@@ -226,16 +277,15 @@ public class AnalysisWindow {
         JPanel bundleIdPanel = new JPanel(new BorderLayout());
         bundleIdPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         bundleIdPanel.add(bundleIdValue, BorderLayout.CENTER);
-    
-        // Initialize the selected file label and set some padding
-        selectedFileLabel = new JLabel("No file selected");
-        selectedFileLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
 
         // Create a panel for the selected file label
         JPanel fileLabelPanel = new JPanel(new BorderLayout());
-        fileLabelPanel.add(selectedFileLabel, BorderLayout.CENTER);
-        // Add a thin, semi-transparent border just to the bottom
-        fileLabelPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 0, new java.awt.Color(200, 200, 200, 64)));
+        
+        // Create a panel to hold both the label and tabs
+        JPanel labelAndTabsPanel = new JPanel(new BorderLayout());
+        labelAndTabsPanel.add(SelectFile.getFileTabsPanel(), BorderLayout.CENTER);
+        
+        fileLabelPanel.add(labelAndTabsPanel, BorderLayout.CENTER);
 
         // Add this panel to the top of the content area
         JPanel rightPanel = new JPanel(new BorderLayout());
@@ -582,6 +632,18 @@ public class AnalysisWindow {
 
         // Add this line after populating the strings panel
         populateResourceStringsPanel();
+
+        // Select Info.plist node by default and display its content
+        DefaultMutableTreeNode infoNode = NodeOperations.findInfoPlistNode((DefaultMutableTreeNode) treeModel.getRoot());
+        if (infoNode != null) {
+            TreePath infoPath = new TreePath(treeModel.getPathToRoot(infoNode));
+            fileTree.setSelectionPath(infoPath);
+            fileTree.scrollPathToVisible(infoPath);
+            SelectFile.addFile(infoPath);
+            
+            // Add this line to trigger content display
+            displaySelectedFileContent(new TreeSelectionEvent(fileTree, infoPath, false, null, null));
+        }
     }
 
     private static void unzipAndLoadToTree(File fileToUnzip, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
@@ -729,7 +791,6 @@ public class AnalysisWindow {
                 }
 
                 // After dbHandler is initialized, set it in ResourceParser
-                System.out.println("LAURIE setting dbHandler in ResourceParser");
                 ResourceParser.setDatabaseHandler(dbHandler);
 
                 return null;
@@ -864,8 +925,6 @@ public class AnalysisWindow {
 
         TreePath path = e.getPath();
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-
-        selectedFileLabel.setText(node.getUserObject().toString());
     
         // Check if we're in the Classes root
         if (isInClassesTree(path)) {
@@ -1366,5 +1425,86 @@ public class AnalysisWindow {
                 }
             }
         }
+    }
+
+    public static void showFileContent(String filePath) {
+        if (filePath == null) {
+            fileContentArea.setText("");
+            return;
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            DefaultMutableTreeNode root = (DefaultMutableTreeNode) treeModel.getRoot();
+            DefaultMutableTreeNode targetNode = null;
+            
+            // Check if this is a class/function path (contains "Classes/")
+            if (filePath.startsWith("Classes/")) {
+                String[] parts = filePath.split("/");
+                // Skip "Classes" and look for the class (and optionally function) node
+                if (parts.length >= 2) {
+                    // Find Classes root node
+                    for (int i = 0; i < root.getChildCount(); i++) {
+                        DefaultMutableTreeNode node = (DefaultMutableTreeNode) root.getChildAt(i);
+                        if (node.getUserObject().toString().equals("Classes")) {
+                            // Find class node
+                            for (int j = 0; j < node.getChildCount(); j++) {
+                                DefaultMutableTreeNode classNode = (DefaultMutableTreeNode) node.getChildAt(j);
+                                if (classNode.getUserObject().toString().equals(parts[1])) {
+                                    // If we're looking for a specific function
+                                    if (parts.length == 3) {
+                                        for (int k = 0; k < classNode.getChildCount(); k++) {
+                                            DefaultMutableTreeNode functionNode = (DefaultMutableTreeNode) classNode.getChildAt(k);
+                                            if (functionNode.getUserObject().toString().equals(parts[2])) {
+                                                targetNode = functionNode;
+                                                break;
+                                            }
+                                        }
+                                    } else {
+                                        targetNode = classNode;
+                                    }
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Regular file path search
+                targetNode = findNodeByPath(root, filePath);
+            }
+    
+            if (targetNode != null) {
+                TreePath path = new TreePath(targetNode.getPath());
+                
+                // Only update if the selection has changed
+                if (!path.equals(fileTree.getSelectionPath())) {
+                    fileTree.setSelectionPath(path);
+                    fileTree.scrollPathToVisible(path);
+                    displaySelectedFileContent(new TreeSelectionEvent(fileTree, path, false, null, null));
+                }
+            }
+        });
+    }
+
+    // Helper method to find a node by path
+    private static DefaultMutableTreeNode findNodeByPath(DefaultMutableTreeNode root, String path) {
+        String[] parts = path.split("/");
+        DefaultMutableTreeNode current = root;
+        
+        for (String part : parts) {
+            boolean found = false;
+            for (int i = 0; i < current.getChildCount(); i++) {
+                DefaultMutableTreeNode child = (DefaultMutableTreeNode) current.getChildAt(i);
+                if (child.getUserObject().toString().equals(part)) {
+                    current = child;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return null;
+        }
+        
+        return current;
     }
 }

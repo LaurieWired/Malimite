@@ -78,40 +78,29 @@ public class Malimite {
     
     public static void updateTheme(String theme) {
         SafeMenuAction.execute(() -> {
-            switch (theme) {
-                case "dark":
-                    FlatDarkLaf.setup();
-                    break;
-                case "light":
-                    FlatLightLaf.setup();
-                    break;
-                default:
-                    FlatLightLaf.setup();
-                    break;
+            // Mirror exactly what happens in main()
+            if (theme.equals("dark")) {
+                FlatDarkLaf.setup();
+            } else {
+                FlatLightLaf.setup();
             }
             
             // Update all windows' look-and-feel
             for (Window window : Window.getWindows()) {
                 SwingUtilities.updateComponentTreeUI(window);
-            }
-    
-            // Apply custom syntax theme to RSyntaxTextArea components after UI update
-            for (Window window : Window.getWindows()) {
-                applyCustomSyntaxTheme(window);
+                
+                // After updating UI, reapply custom syntax theme to any RSyntaxTextArea
+                for (Component comp : getAllComponents((Container)window)) {
+                    if (comp instanceof RSyntaxTextArea) {
+                        RSyntaxTextArea textArea = (RSyntaxTextArea)comp;
+                        // Force a clean reset of the syntax theme
+                        textArea.setBackground(UIManager.getColor("Panel.background"));
+                        SyntaxUtility.applyCustomTheme(textArea);
+                    }
+                }
             }
         });
     }    
-
-    // Add this helper method
-    private static void applyCustomSyntaxTheme(Window window) {
-        if (window instanceof JFrame || window instanceof JDialog) {
-            for (Component comp : getAllComponents((Container)window)) {
-                if (comp instanceof RSyntaxTextArea) {
-                    SyntaxUtility.applyCustomTheme((RSyntaxTextArea)comp);
-                }
-            }
-        }
-    }
 
     // Add this utility method to get all components recursively
     private static List<Component> getAllComponents(Container container) {
