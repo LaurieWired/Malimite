@@ -100,6 +100,7 @@ public class SelectFile {
     }
     
     public static void addFile(TreePath path) {
+        //printDebugState("addFile - start");
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         String filePath = buildPathFromNode(node);
         
@@ -119,19 +120,22 @@ public class SelectFile {
             
             // Add the tab to the panel
             fileTabsPanel.add(tab);
-            
-            // Force layout update
-            fileTabsPanel.revalidate();
-            fileTabsContainer.revalidate();
-            fileTabsPanel.repaint();
-            fileTabsContainer.repaint();
         }
+
+        // Force layout update
+        fileTabsPanel.revalidate();
+        fileTabsContainer.revalidate();
+        fileTabsPanel.repaint();
+        fileTabsContainer.repaint();
         
         // Set as active file
         setActiveFile(filePath);
+        //printDebugState("addFile - end");
     }
     
     private static void closeFile(String filePath) {
+        //printDebugState("closeFile - start");
+        System.out.println("Closing file: " + filePath);
         FileTab tab = openFiles.remove(filePath);
         if (tab != null) {
             fileTabsPanel.remove(tab);
@@ -152,9 +156,12 @@ public class SelectFile {
             fileTabsPanel.revalidate();
             fileTabsPanel.repaint();
         }
+        //printDebugState("closeFile - end");
     }
     
     private static void setActiveFile(String filePath) {
+        //printDebugState("setActiveFile - start");
+        System.out.println("Setting active file: " + filePath);
         // Prevent unnecessary updates if the file is already active
         if (filePath != null && filePath.equals(activeFile)) {
             return;
@@ -163,12 +170,15 @@ public class SelectFile {
         activeFile = filePath;
         openFiles.forEach((path, tab) -> tab.setActive(path.equals(filePath)));
         
-        // Update all tabs visually
+        // Force layout update
         fileTabsPanel.revalidate();
+        fileTabsContainer.revalidate();
         fileTabsPanel.repaint();
+        fileTabsContainer.repaint();
         
         // Always notify AnalysisWindow to update content, whether filePath is null or not
         AnalysisWindow.showFileContent(filePath);
+        //printDebugState("setActiveFile - end");
     }
     
     private static String buildPathFromNode(DefaultMutableTreeNode node) {
@@ -184,6 +194,7 @@ public class SelectFile {
     }
     
     public static void clear() {
+        //printDebugState("clear - start");
         openFiles.clear();
         fileOrder.clear();
         fileTabsPanel.removeAll();
@@ -191,6 +202,7 @@ public class SelectFile {
         fileTabsPanel.repaint();
         activeFile = null;
         scrollPosition = 0;
+        //printDebugState("clear - end");
     }
 
     private static void addEmptyTab() {
@@ -200,6 +212,7 @@ public class SelectFile {
     }
 
     private static void scroll(int direction) {
+        //printDebugState("scroll - start");
         if (fileOrder.isEmpty()) return;
         
         int currentIndex = activeFile != null ? fileOrder.indexOf(activeFile) : -1;
@@ -215,6 +228,7 @@ public class SelectFile {
             // Force content update in AnalysisWindow
             AnalysisWindow.showFileContent(newFilePath);
         }
+        //printDebugState("scroll - end");
     }    
 
     private static void ensureTabVisible(int index) {
@@ -253,6 +267,8 @@ public class SelectFile {
     }
 
     public static void replaceActiveFile(TreePath path) {
+        //printDebugState("replaceActiveFile - start");
+        System.out.println("Replacing active file: " + path);
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         String filePath = buildPathFromNode(node);
         
@@ -276,11 +292,19 @@ public class SelectFile {
         
         fileTabsPanel.revalidate();
         fileTabsPanel.repaint();
+        //printDebugState("replaceActiveFile - end");
     }
 
     public static boolean isFileOpen(TreePath path) {
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         String filePath = buildPathFromNode(node);
         return openFiles.containsKey(filePath);
+    }
+
+    private static void printDebugState(String functionName) {
+        System.out.println("\n=== " + functionName + " ===");
+        System.out.println("openFiles: " + openFiles.keySet());
+        System.out.println("fileOrder: " + fileOrder);
+        System.out.println("activeFile: " + activeFile);
     }
 }

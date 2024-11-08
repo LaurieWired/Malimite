@@ -123,6 +123,9 @@ public class AnalysisWindow {
     private static JPanel resourceStringsPanel;
     private static JLabel resourceStringsCloseLabel;
 
+    // Add this flag to track whether we're updating from SelectFile
+    private static boolean updatingFromSelectFile = false;
+
     public static void show(File file, Config config) {
         SafeMenuAction.execute(() -> {
             if (analysisFrame != null && analysisFrame.isVisible()) {
@@ -1440,51 +1443,45 @@ public class AnalysisWindow {
             // Check if this is a class/function path (contains "Classes/")
             if (filePath.startsWith("Classes/")) {
                 String[] parts = filePath.split("/");
-                // Skip "Classes" and look for the class (and optionally function) node
                 if (parts.length >= 2) {
-                    // Find Classes root node
-                    for (int i = 0; i < root.getChildCount(); i++) {
-                        DefaultMutableTreeNode node = (DefaultMutableTreeNode) root.getChildAt(i);
-                        if (node.getUserObject().toString().equals("Classes")) {
-                            // Find class node
-                            for (int j = 0; j < node.getChildCount(); j++) {
-                                DefaultMutableTreeNode classNode = (DefaultMutableTreeNode) node.getChildAt(j);
-                                if (classNode.getUserObject().toString().equals(parts[1])) {
-                                    // If we're looking for a specific function
-                                    if (parts.length == 3) {
-                                        for (int k = 0; k < classNode.getChildCount(); k++) {
-                                            DefaultMutableTreeNode functionNode = (DefaultMutableTreeNode) classNode.getChildAt(k);
-                                            if (functionNode.getUserObject().toString().equals(parts[2])) {
-                                                targetNode = functionNode;
-                                                break;
-                                            }
-                                        }
-                                    } else {
-                                        targetNode = classNode;
-                                    }
-                                    break;
-                                }
-                            }
-                            break;
-                        }
+                    String className = parts[1];
+                    String functionName = parts.length == 3 ? parts[2] : null;
+                    
+                    // If it's a function, display just that function
+                    if (functionName != null) {
+                        displayFunctionDecompilation(functionName, className);
+                    } else {
+                        // If it's a class, display the whole class
+                        displayClassDecompilation(className);
                     }
+                    
+                    // Find the node for tree selection
+                    targetNode = findClassOrFunctionNode(root, className, functionName);
                 }
             } else {
-                // Regular file path search
+                // Regular file path handling
                 targetNode = findNodeByPath(root, filePath);
-            }
-    
-            if (targetNode != null) {
-                TreePath path = new TreePath(targetNode.getPath());
                 
-                // Only update if the selection has changed
-                if (!path.equals(fileTree.getSelectionPath())) {
-                    fileTree.setSelectionPath(path);
-                    fileTree.scrollPathToVisible(path);
+                if (targetNode != null) {
+                    TreePath path = new TreePath(targetNode.getPath());
                     displaySelectedFileContent(new TreeSelectionEvent(fileTree, path, false, null, null));
                 }
             }
+
+            // Only update tree selection if not called from SelectFile
+            if (targetNode != null && !updatingFromSelectFile) {
+                TreePath path = new TreePath(targetNode.getPath());
+                fileTree.setSelectionPath(path);
+                fileTree.scrollPathToVisible(path);
+            }
         });
+    }
+
+    // Add this method to be called from SelectFile
+    public static void showFileContentFromSelectFile(String filePath) {
+        updatingFromSelectFile = true;
+        showFileContent(filePath);
+        updatingFromSelectFile = false;
     }
 
     // Helper method to find a node by path
@@ -1492,19 +1489,72 @@ public class AnalysisWindow {
         String[] parts = path.split("/");
         DefaultMutableTreeNode current = root;
         
-        for (String part : parts) {
+        int currentPartIndex = 0;
+        while (currentPartIndex < parts.length) {
             boolean found = false;
-            for (int i = 0; i < current.getChildCount(); i++) {
-                DefaultMutableTreeNode child = (DefaultMutableTreeNode) current.getChildAt(i);
-                if (child.getUserObject().toString().equals(part)) {
-                    current = child;
-                    found = true;
+            
+            // Try combining parts until we find a match or run out of parts
+            StringBuilder combinedPart = new StringBuilder(parts[currentPartIndex]);
+            int combinedPartsCount = 1;
+            
+            while (!found && (currentPartIndex + combinedPartsCount) <= parts.length) {
+                String searchTerm = combinedPart.toString();
+                
+                // Check all children for this combined term
+                for (int i = 0; i < current.getChildCount(); i++) {
+                    DefaultMutableTreeNode child = (DefaultMutableTreeNode) current.getChildAt(i);
+                    if (child.getUserObject().toString().equals(searchTerm)) {
+                        current = child;
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found && (currentPartIndex + combinedPartsCount) < parts.length) {
+                    // If no match found, add the next part and try again
+                    combinedPart.append("/").append(parts[currentPartIndex + combinedPartsCount]);
+                    combinedPartsCount++;
+                } else {
                     break;
                 }
             }
-            if (!found) return null;
+            
+            if (!found) {
+                return null;
+            }
+            
+            // Skip ahead by the number of parts we combined
+            currentPartIndex += combinedPartsCount;
         }
         
         return current;
+    }
+
+    // Helper method to find class or function node
+    private static DefaultMutableTreeNode findClassOrFunctionNode(DefaultMutableTreeNode root, String className, String functionName) {
+        // Find Classes root node
+        for (int i = 0; i < root.getChildCount(); i++) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) root.getChildAt(i);
+            if (node.getUserObject().toString().equals("Classes")) {
+                // Find class node
+                for (int j = 0; j < node.getChildCount(); j++) {
+                    DefaultMutableTreeNode classNode = (DefaultMutableTreeNode) node.getChildAt(j);
+                    if (classNode.getUserObject().toString().equals(className)) {
+                        // If we're looking for a specific function
+                        if (functionName != null) {
+                            for (int k = 0; k < classNode.getChildCount(); k++) {
+                                DefaultMutableTreeNode functionNode = (DefaultMutableTreeNode) classNode.getChildAt(k);
+                                if (functionNode.getUserObject().toString().equals(functionName)) {
+                                    return functionNode;
+                                }
+                            }
+                        } else {
+                            return classNode;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 }
