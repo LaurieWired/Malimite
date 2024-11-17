@@ -82,15 +82,14 @@ public class ResourceParser {
                     lineCount++;
                     
                     if (!line.trim().isEmpty()) {
-                        // Split the line into segments of printable characters
                         String[] segments = line.split("[^\\p{Print}]+");
                         for (String segment : segments) {
-                            // Remove whitespace and check if length is more than 4
                             String trimmedSegment = segment.trim();
                             if (!trimmedSegment.isEmpty() && trimmedSegment.replaceAll("\\s+", "").length() > 4) {
                                 if (dbHandler != null) {
+                                    // Store the full path instead of the relative path
                                     dbHandler.insertResourceString(fileName, segment, getResourceType(fileName));
-                                    LOGGER.fine("Inserted resource string: " + segment);
+                                    LOGGER.fine("Inserted resource string: " + segment + " for path: " + fileName);
                                 }
                             }
                         }

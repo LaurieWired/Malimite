@@ -16,6 +16,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextPane;
 import javax.swing.JToggleButton;
@@ -25,7 +26,9 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.DefaultListModel;
+import javax.swing.event.HyperlinkEvent;
 import javax.swing.event.TreeSelectionEvent;
+import javax.swing.table.TableColumnModel;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -195,47 +198,77 @@ public class AnalysisWindow {
         fileTree = new JTree(treeModel);
         fileTree.setRootVisible(false);
         fileTree.addMouseListener(new MouseAdapter() {
-            private static final int DOUBLE_CLICK_DELAY = 250; // milliseconds
-            private Timer singleClickTimer;
+            private Timer clickTimer;
+        
+            @Override
+            public void mousePressed(MouseEvent e) {
+                handlePopupTrigger(e); // Check for right-click or popup trigger on press
+            }
+        
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                handlePopupTrigger(e); // Check for right-click or popup trigger on release
+            }
         
             @Override
             public void mouseClicked(MouseEvent e) {
-                TreePath path = fileTree.getPathForLocation(e.getX(), e.getY());
-                if (path == null || path.getLastPathComponent() == null) {
-                    return;
-                }
-                
-                DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    TreePath path = fileTree.getPathForLocation(e.getX(), e.getY());
+                    if (path == null || path.getLastPathComponent() == null) {
+                        return;
+                    }
         
-                // Check if it's a double-click
-                if (e.getClickCount() == 2) {
-                    // If double-click, cancel the single-click timer and execute double-click action
-                    if (singleClickTimer != null && singleClickTimer.isRunning()) {
-                        singleClickTimer.stop();
-                    }
-                    System.out.println("double click");
-                    if (node.isLeaf()) {
-                        SelectFile.addFile(path);
-                        displaySelectedFileContent(new TreeSelectionEvent(fileTree, path, false, null, null));
-                    }
-                } else if (e.getClickCount() == 1) {
-                    // Start a timer for single-click action
-                    singleClickTimer = new Timer(DOUBLE_CLICK_DELAY, new ActionListener() {
-                        @Override
-                        public void actionPerformed(ActionEvent evt) {
-                            System.out.println("single click");
-                            displaySelectedFileContent(new TreeSelectionEvent(fileTree, path, false, null, null));
-                            
-                            // Check if the file is already open first
-                            if (SelectFile.isFileOpen(path)) {
-                                SelectFile.handleNodeClick(path);
-                            } else if (node.isLeaf() || isInClassesTree(path)) {
-                                SelectFile.replaceActiveFile(path);
-                            }
+                    DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        
+                    if (e.getClickCount() == 2) {
+                        // Cancel the single-click timer if a double-click is detected
+                        if (clickTimer != null && clickTimer.isRunning()) {
+                            clickTimer.stop();
                         }
-                    });
-                    singleClickTimer.setRepeats(false);
-                    singleClickTimer.start();
+        
+                        // Handle double-click
+                        if (node.isLeaf()) {
+                            SelectFile.addFile(path);
+                            displaySelectedFileContent(new TreeSelectionEvent(fileTree, path, false, null, null));
+                        }
+                    } else if (e.getClickCount() == 1) {
+                        // Delay single-click logic to distinguish it from double-click
+                        if (clickTimer != null && clickTimer.isRunning()) {
+                            clickTimer.stop();
+                        }
+        
+                        clickTimer = new Timer(200, new ActionListener() {
+                            @Override
+                            public void actionPerformed(ActionEvent evt) {
+                                // Handle single-click
+                                System.out.println("single click");
+                                displaySelectedFileContent(new TreeSelectionEvent(fileTree, path, false, null, null));
+        
+                                // Check if the file is already open
+                                if (SelectFile.isFileOpen(path)) {
+                                    SelectFile.handleNodeClick(path);
+                                } else if (node.isLeaf() || isInClassesTree(path)) {
+                                    SelectFile.replaceActiveFile(path);
+                                }
+                                clickTimer.stop();
+                            }
+                        });
+                        clickTimer.setRepeats(false);
+                        clickTimer.start();
+                    }
+                }
+            }
+        
+            private void handlePopupTrigger(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    TreePath path = fileTree.getPathForLocation(e.getX(), e.getY());
+                    if (path != null && isInClassesTree(path) && path.getPathCount() == 4) {
+                        JPopupMenu popup = new JPopupMenu();
+                        JMenuItem editItem = new JMenuItem("Edit function");
+                        editItem.addActionListener(ev -> startEditing(path));
+                        popup.add(editItem);
+                        popup.show(fileTree, e.getX(), e.getY());
+                    }
                 }
             }
         });
@@ -568,35 +601,7 @@ public class AnalysisWindow {
         rightTopPanel.add(bundleIdPanel, BorderLayout.NORTH);
         rightTopPanel.add(fileLabelPanel, BorderLayout.CENTER);
         rightTopPanel.add(saveButton, BorderLayout.EAST);
-        rightPanel.add(rightTopPanel, BorderLayout.NORTH);
-
-        // Add context menu to the tree
-        fileTree.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                maybeShowPopup(e);
-            }
-        
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                maybeShowPopup(e);
-            }
-        
-            private void maybeShowPopup(MouseEvent e) {
-                // Check for right-click or equivalent on all OSes
-                if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
-                    TreePath path = fileTree.getPathForLocation(e.getX(), e.getY());
-                    if (path != null && isInClassesTree(path) && path.getPathCount() == 4) {
-                        // Show context menu for function nodes only
-                        JPopupMenu popup = new JPopupMenu();
-                        JMenuItem editItem = new JMenuItem("Edit function");
-                        editItem.addActionListener(ev -> startEditing(path));
-                        popup.add(editItem);
-                        popup.show(fileTree, e.getX(), e.getY());
-                    }
-                }
-            }
-        });        
+        rightPanel.add(rightTopPanel, BorderLayout.NORTH);     
 
         // Add status panel at the bottom
         statusPanel = new JPanel(new BorderLayout());
@@ -1370,41 +1375,79 @@ public class AnalysisWindow {
         if (dbHandler != null && resourceStringsPanel != null) {
             List<Map<String, String>> resourceStrings = dbHandler.getResourceStrings();
             
-            StringBuilder content = new StringBuilder();
-            content.append("<html><body style='font-family: monospace'>");
+            // Create table model with column names
+            String[] columnNames = {"Value", "File", "Type"};
+            Object[][] data = new Object[resourceStrings.size()][3];
             
-            content.append("<table style='white-space: nowrap'>");
-            content.append("<tr>");
-            content.append("<th style='text-align: left; padding-right: 20px'>Value</th>");
-            content.append("<th style='text-align: left; padding-right: 20px'>File</th>");
-            content.append("<th style='text-align: left'>Type</th>");
-            content.append("</tr>");
-            
-            for (Map<String, String> string : resourceStrings) {
+            // Populate table data
+            for (int i = 0; i < resourceStrings.size(); i++) {
+                Map<String, String> string = resourceStrings.get(i);
                 String value = string.get("value");
-                // Escape HTML special characters
-                value = value.replace("&", "&amp;")
-                           .replace("<", "&lt;")
-                           .replace(">", "&gt;")
-                           .replace("\"", "&quot;")
-                           .replace("'", "&#39;");
-                
-                String truncatedValue = value.length() > 60 ? value.substring(0, 60) + "..." : value;
-                
-                // Extract just the filename from the full path
                 String fullPath = string.get("resourceId");
                 String fileName = fullPath.substring(fullPath.lastIndexOf('/') + 1);
                 
-                content.append("<tr>");
-                content.append("<td style='padding-right: 20px; white-space: nowrap'>").append(truncatedValue).append("</td>");
-                content.append("<td style='padding-right: 20px; white-space: nowrap'>").append(fileName).append("</td>");
-                content.append("<td style='white-space: nowrap'>").append(string.get("type")).append("</td>");
-                content.append("</tr>");
+                // Truncate value if too long
+                String truncatedValue = value.length() > 60 ? value.substring(0, 60) + "..." : value;
+                
+                data[i][0] = truncatedValue;
+                data[i][1] = fileName;
+                data[i][2] = string.get("type");
             }
             
-            content.append("</table></body></html>");
+            // Create table
+            JTable table = new JTable(data, columnNames) {
+                @Override
+                public boolean isCellEditable(int row, int column) {
+                    return false;  // Make table read-only
+                }
+            };
             
-            updatePanelContent(resourceStringsPanel, content.toString());
+            // Add mouse listener for row clicks
+            table.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    int row = table.rowAtPoint(e.getPoint());
+                    if (row >= 0 && row < resourceStrings.size()) {
+                        String resourcePath = resourceStrings.get(row).get("resourceId");
+                        String fullPath = "Files/" + resourcePath;
+                        DefaultMutableTreeNode node = findNodeByPath((DefaultMutableTreeNode) treeModel.getRoot(), fullPath);
+                        if (node != null) {
+                            TreePath path = new TreePath(node.getPath());
+
+                            if (SelectFile.isFileOpen(path)) {
+                                SelectFile.handleNodeClick(path);
+                            } else {
+                                SelectFile.replaceActiveFile(path);
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Style the table
+            table.setShowGrid(false);
+            table.setIntercellSpacing(new Dimension(0, 0));
+            table.setRowHeight(25);
+            table.getTableHeader().setReorderingAllowed(false);
+            
+            // Add selection highlighting
+            table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+            table.setRowSelectionAllowed(true);
+            
+            // Set column widths
+            TableColumnModel columnModel = table.getColumnModel();
+            columnModel.getColumn(0).setPreferredWidth(300);  // Value column
+            columnModel.getColumn(1).setPreferredWidth(150);  // File column
+            columnModel.getColumn(2).setPreferredWidth(100);  // Type column
+            
+            // Update the panel's content
+            Component[] components = resourceStringsPanel.getComponents();
+            for (Component component : components) {
+                if (component instanceof JScrollPane) {
+                    ((JScrollPane) component).setViewportView(table);
+                    break;
+                }
+            }
         }
     }
 
@@ -1486,45 +1529,39 @@ public class AnalysisWindow {
 
     // Helper method to find a node by path
     private static DefaultMutableTreeNode findNodeByPath(DefaultMutableTreeNode root, String path) {
+        path = path.replaceAll("/+", "/");
+        
         String[] parts = path.split("/");
         DefaultMutableTreeNode current = root;
         
-        int currentPartIndex = 0;
-        while (currentPartIndex < parts.length) {
+        for (int i = 0; i < parts.length; i++) {
             boolean found = false;
             
-            // Try combining parts until we find a match or run out of parts
-            StringBuilder combinedPart = new StringBuilder(parts[currentPartIndex]);
-            int combinedPartsCount = 1;
-            
-            while (!found && (currentPartIndex + combinedPartsCount) <= parts.length) {
-                String searchTerm = combinedPart.toString();
+            for (int j = 0; j < current.getChildCount(); j++) {
+                DefaultMutableTreeNode child = (DefaultMutableTreeNode) current.getChildAt(j);
+                String nodeValue = child.getUserObject().toString().replaceAll("/+", "/");
                 
-                // Check all children for this combined term
-                for (int i = 0; i < current.getChildCount(); i++) {
-                    DefaultMutableTreeNode child = (DefaultMutableTreeNode) current.getChildAt(i);
-                    if (child.getUserObject().toString().equals(searchTerm)) {
+                if (nodeValue.equals(parts[i])) {
+                    current = child;
+                    j = 0;
+                    found = true;
+                    break;
+                } else if (nodeValue.contains(parts[i]) && i + 1 < parts.length) {
+                    String combined = parts[i] + "/" + parts[i + 1] + "/";
+                    if (nodeValue.equals(combined)) {
                         current = child;
+                        j = 0;
+                        i++;
                         found = true;
                         break;
                     }
                 }
-                
-                if (!found && (currentPartIndex + combinedPartsCount) < parts.length) {
-                    // If no match found, add the next part and try again
-                    combinedPart.append("/").append(parts[currentPartIndex + combinedPartsCount]);
-                    combinedPartsCount++;
-                } else {
-                    break;
-                }
+                    
             }
             
             if (!found) {
-                return null;
+                return null; // If any part of the path is not found, return null
             }
-            
-            // Skip ahead by the number of parts we combined
-            currentPartIndex += combinedPartsCount;
         }
         
         return current;
