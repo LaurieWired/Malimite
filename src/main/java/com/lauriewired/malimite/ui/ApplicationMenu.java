@@ -67,7 +67,24 @@ public class ApplicationMenu {
                 NodeOperations.collapseAllTreeNodes(fileTree),
                 KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.CTRL_DOWN_MASK)
             );
+
+            viewMenu.addSeparator();
         }
+
+        addMenuItem(viewMenu, "Zoom In", e -> 
+            AnalysisWindow.zoomIn(),
+            KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.CTRL_DOWN_MASK)
+        );
+
+        addMenuItem(viewMenu, "Zoom Out", e -> 
+            AnalysisWindow.zoomOut(),
+            KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.CTRL_DOWN_MASK)
+        );
+
+        addMenuItem(viewMenu, "Reset Zoom", e -> 
+            AnalysisWindow.resetZoom(),
+            KeyStroke.getKeyStroke(KeyEvent.VK_0, KeyEvent.CTRL_DOWN_MASK)
+        );
 
         return viewMenu;
     }

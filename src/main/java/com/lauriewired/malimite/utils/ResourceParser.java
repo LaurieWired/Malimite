@@ -87,9 +87,9 @@ public class ResourceParser {
                             String trimmedSegment = segment.trim();
                             if (!trimmedSegment.isEmpty() && trimmedSegment.replaceAll("\\s+", "").length() > 4) {
                                 if (dbHandler != null) {
-                                    // Store the full path instead of the relative path
-                                    dbHandler.insertResourceString(fileName, segment, getResourceType(fileName));
-                                    LOGGER.fine("Inserted resource string: " + segment + " for path: " + fileName);
+                                    // Store the trimmed segment
+                                    dbHandler.insertResourceString(fileName, trimmedSegment, getResourceType(fileName));
+                                    LOGGER.fine("Inserted resource string: " + trimmedSegment + " for path: " + fileName);
                                 }
                             }
                         }

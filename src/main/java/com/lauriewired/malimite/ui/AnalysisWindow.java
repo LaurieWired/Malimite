@@ -81,6 +81,7 @@ import java.awt.Frame;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Rectangle;
 
 public class AnalysisWindow {
     private static final Logger LOGGER = Logger.getLogger(AnalysisWindow.class.getName());
@@ -1210,8 +1211,7 @@ public class AnalysisWindow {
         gbc.insets = new Insets(5, 5, 5, 5);
 
         // Get selected function names from functionList in order
-        JList<String> functionList = (JList<String>) ((JScrollPane) ((JPanel) functionAssistPanel
-            .getComponent(1)).getComponent(1)).getViewport().getView();
+        JList<String> functionList = (JList<String>) ((JScrollPane) ((JPanel) functionAssistPanel.getComponent(1)).getComponent(1)).getViewport().getView();
         List<String> selectedFunctionNames = functionList.getSelectedValuesList();
 
         TreePath path = fileTree.getSelectionPath();
@@ -1382,7 +1382,7 @@ public class AnalysisWindow {
             // Populate table data
             for (int i = 0; i < resourceStrings.size(); i++) {
                 Map<String, String> string = resourceStrings.get(i);
-                String value = string.get("value");
+                String value = string.get("value").trim();
                 String fullPath = string.get("resourceId");
                 String fileName = fullPath.substring(fullPath.lastIndexOf('/') + 1);
                 
@@ -1408,17 +1408,43 @@ public class AnalysisWindow {
                 public void mouseClicked(MouseEvent e) {
                     int row = table.rowAtPoint(e.getPoint());
                     if (row >= 0 && row < resourceStrings.size()) {
-                        String resourcePath = resourceStrings.get(row).get("resourceId");
+                        Map<String, String> selectedString = resourceStrings.get(row);
+                        String resourcePath = selectedString.get("resourceId");
                         String fullPath = "Files/" + resourcePath;
+                        String searchValue = selectedString.get("value").trim();
+                        
                         DefaultMutableTreeNode node = findNodeByPath((DefaultMutableTreeNode) treeModel.getRoot(), fullPath);
                         if (node != null) {
                             TreePath path = new TreePath(node.getPath());
 
+                            // Open the file if it's not already open
                             if (SelectFile.isFileOpen(path)) {
                                 SelectFile.handleNodeClick(path);
                             } else {
                                 SelectFile.replaceActiveFile(path);
                             }
+
+                            // After the file is opened, find and highlight the string
+                            SwingUtilities.invokeLater(() -> {
+                                String content = fileContentArea.getText();
+                                int index = content.indexOf(searchValue);
+                                if (index != -1) {
+                                    fileContentArea.setCaretPosition(index);
+                                    try {
+                                        // Highlight the found text
+                                        fileContentArea.setSelectionStart(index);
+                                        fileContentArea.setSelectionEnd(index + searchValue.length());
+                                        
+                                        // Ensure the found text is visible in the viewport
+                                        Rectangle rect = fileContentArea.modelToView(index);
+                                        if (rect != null) {
+                                            fileContentArea.scrollRectToVisible(rect);
+                                        }
+                                    } catch (Exception ex) {
+                                        LOGGER.warning("Error highlighting text: " + ex.getMessage());
+                                    }
+                                }
+                            });
                         }
                     }
                 }
@@ -1593,5 +1619,32 @@ public class AnalysisWindow {
             }
         }
         return null;
+    }
+
+    public static void zoomIn() {
+        if (fileContentArea != null) {
+            Font currentFont = fileContentArea.getFont();
+            float newSize = currentFont.getSize() + 2.0f;
+            if (newSize <= 72.0f) { // Maximum size limit
+                fileContentArea.setFont(currentFont.deriveFont(newSize));
+            }
+        }
+    }
+
+    public static void zoomOut() {
+        if (fileContentArea != null) {
+            Font currentFont = fileContentArea.getFont();
+            float newSize = currentFont.getSize() - 2.0f;
+            if (newSize >= 8.0f) { // Minimum size limit
+                fileContentArea.setFont(currentFont.deriveFont(newSize));
+            }
+        }
+    }
+
+    public static void resetZoom() {
+        if (fileContentArea != null) {
+            Font currentFont = fileContentArea.getFont();
+            fileContentArea.setFont(currentFont.deriveFont(14.0f)); // Reset to default size
+        }
     }
 }

@@ -49,15 +49,20 @@
       <artifactId>flatlaf</artifactId>
       <version>3.5.2</version>
     </dependency>
-  <dependency>
+    <dependency>
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcprov-jdk15on</artifactId>
       <version>1.70</version>
-  </dependency>
-  <dependency>
+    </dependency>
+    <dependency>
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcpkix-jdk15on</artifactId>
       <version>1.70</version>
-  </dependency>
+    </dependency>
+    <dependency>
+      <groupId>org.antlr</groupId>
+      <artifactId>antlr4-runtime</artifactId>
+      <version>4.13.0</version>
+    </dependency>
   </dependencies>
 </project>
