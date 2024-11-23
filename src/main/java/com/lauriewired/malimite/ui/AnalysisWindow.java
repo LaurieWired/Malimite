@@ -72,6 +72,7 @@ import com.lauriewired.malimite.utils.FileProcessing;
 import com.lauriewired.malimite.utils.NodeOperations;
 import com.lauriewired.malimite.utils.PlistUtils;
 import com.lauriewired.malimite.utils.ResourceParser;
+import com.lauriewired.malimite.decompile.SyntaxParser;
 
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -82,6 +83,8 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Rectangle;
+
+import org.antlr.v4.runtime.tree.ParseTree;
 
 public class AnalysisWindow {
     private static final Logger LOGGER = Logger.getLogger(AnalysisWindow.class.getName());
@@ -1054,6 +1057,19 @@ public class AnalysisWindow {
                 content.append("// Class: ").append(className).append("\n");
                 content.append("// Function: ").append(functionName).append("\n\n");
                 content.append(functionDecompilation);
+                
+                // Test SyntaxParser on the decompiled code
+                SyntaxParser parser = new SyntaxParser();
+                System.out.println("\n=== Testing SyntaxParser on " + functionName + " ===");
+                ParseTree tree = parser.parseCode(functionDecompilation);
+                if (tree != null) {
+                    String reprintedCode = parser.reprintCode(tree);
+                    System.out.println("Parsed and reprinted code:");
+                    System.out.println(reprintedCode);
+                } else {
+                    System.out.println("Failed to parse code");
+                }
+                System.out.println("=====================================\n");
                 
                 fileContentArea.setText(content.toString());
                 fileContentArea.setCaretPosition(0);
