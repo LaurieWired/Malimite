@@ -72,7 +72,6 @@ import com.lauriewired.malimite.utils.FileProcessing;
 import com.lauriewired.malimite.utils.NodeOperations;
 import com.lauriewired.malimite.utils.PlistUtils;
 import com.lauriewired.malimite.utils.ResourceParser;
-import com.lauriewired.malimite.decompile.SyntaxParser;
 
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -83,8 +82,6 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Rectangle;
-
-import org.antlr.v4.runtime.tree.ParseTree;
 
 public class AnalysisWindow {
     private static final Logger LOGGER = Logger.getLogger(AnalysisWindow.class.getName());
@@ -132,6 +129,9 @@ public class AnalysisWindow {
 
     // Add this flag to track whether we're updating from SelectFile
     private static boolean updatingFromSelectFile = false;
+
+    // Add this near the other static variables at the top of the class
+    private static String currentClassName;
 
     public static void show(File file, Config config) {
         SafeMenuAction.execute(() -> {
@@ -224,6 +224,18 @@ public class AnalysisWindow {
         
                     DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         
+                    // Add this block to update currentClassName when clicking on a class node
+                    if (isInClassesTree(path)) {
+                        if (path.getPathCount() == 3) { // Class node
+                            currentClassName = node.getUserObject().toString();
+                            LOGGER.info("Selected class: " + currentClassName);
+                        } else if (path.getPathCount() == 4) { // Function node
+                            DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) node.getParent();
+                            currentClassName = parentNode.getUserObject().toString();
+                            LOGGER.info("Selected class (from function): " + currentClassName);
+                        }
+                    }
+        
                     if (e.getClickCount() == 2) {
                         // Cancel the single-click timer if a double-click is detected
                         if (clickTimer != null && clickTimer.isRunning()) {
@@ -245,7 +257,6 @@ public class AnalysisWindow {
                             @Override
                             public void actionPerformed(ActionEvent evt) {
                                 // Handle single-click
-                                System.out.println("single click");
                                 displaySelectedFileContent(new TreeSelectionEvent(fileTree, path, false, null, null));
         
                                 // Check if the file is already open
@@ -286,6 +297,7 @@ public class AnalysisWindow {
         fileContentArea.setCodeFoldingEnabled(true);
     
         SyntaxUtility.applyCustomTheme(fileContentArea);
+        SyntaxUtility.setupWordHighlighting(fileContentArea);
     
         // Add RSyntaxTextArea to RTextScrollPane
         RTextScrollPane contentScrollPane = new RTextScrollPane(fileContentArea);
@@ -619,6 +631,8 @@ public class AnalysisWindow {
         statusPanel.setVisible(false);
         
         contentPanel.add(statusPanel, BorderLayout.SOUTH);
+
+        KeyboardShortcuts.setupShortcuts(fileContentArea, analysisFrame);
 
         return contentPanel;
     }      
@@ -1057,20 +1071,7 @@ public class AnalysisWindow {
                 content.append("// Class: ").append(className).append("\n");
                 content.append("// Function: ").append(functionName).append("\n\n");
                 content.append(functionDecompilation);
-                
-                // Test SyntaxParser on the decompiled code
-                SyntaxParser parser = new SyntaxParser();
-                System.out.println("\n=== Testing SyntaxParser on " + functionName + " ===");
-                ParseTree tree = parser.parseCode(functionDecompilation);
-                if (tree != null) {
-                    String reprintedCode = parser.reprintCode(tree);
-                    System.out.println("Parsed and reprinted code:");
-                    System.out.println(reprintedCode);
-                } else {
-                    System.out.println("Failed to parse code");
-                }
-                System.out.println("=====================================\n");
-                
+
                 fileContentArea.setText(content.toString());
                 fileContentArea.setCaretPosition(0);
             } else {
@@ -1662,5 +1663,14 @@ public class AnalysisWindow {
             Font currentFont = fileContentArea.getFont();
             fileContentArea.setFont(currentFont.deriveFont(14.0f)); // Reset to default size
         }
+    }
+
+    // Add these getter methods
+    public static String getCurrentClassName() {
+        return currentClassName;
+    }
+
+    public static SQLiteDBHandler getDbHandler() {
+        return dbHandler;
     }
 }

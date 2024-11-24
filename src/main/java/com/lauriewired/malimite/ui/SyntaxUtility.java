@@ -13,11 +13,22 @@ import org.fife.ui.rtextarea.Gutter;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxScheme;
 import org.fife.ui.rsyntaxtextarea.Token;
+import org.fife.ui.rtextarea.SmartHighlightPainter;
+import javax.swing.text.Highlighter;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class SyntaxUtility {
 
+    private static final Logger LOGGER = Logger.getLogger(SyntaxUtility.class.getName());
+    private static final Color HIGHLIGHT_COLOR = new Color(255, 255, 0, 70);
+
     public static void applyCustomTheme(RSyntaxTextArea textArea) {
-        // Get the current theme's background color from UIManager
+        // Get the current theme's background color from UIManager¬
         Color themeBackground = UIManager.getColor("Panel.background");
         if (themeBackground == null) {
             // Fallback if UIManager color is not available
@@ -105,5 +116,79 @@ public class SyntaxUtility {
         float[] hsb = Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), null);
         hsb[2] = Math.min(1.0f, hsb[2] * factor); // Adjust brightness
         return Color.getHSBColor(hsb[0], hsb[1], hsb[2]);
+    }
+
+    public static void setupWordHighlighting(RSyntaxTextArea textArea) {
+        Highlighter.HighlightPainter painter = new SmartHighlightPainter(HIGHLIGHT_COLOR);
+
+        textArea.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                highlightSelectedWord(textArea, painter);
+            }
+        });
+
+        textArea.addCaretListener(e -> highlightSelectedWord(textArea, painter));
+    }
+
+    private static void highlightSelectedWord(RSyntaxTextArea textArea, Highlighter.HighlightPainter painter) {
+        // Clear previous highlights
+        textArea.getHighlighter().removeAllHighlights();
+
+        // Get the selected word
+        String selectedText = textArea.getSelectedText();
+        if (selectedText == null || selectedText.trim().isEmpty()) {
+            try {
+                int caretPos = textArea.getCaretPosition();
+                int start = getWordStart(textArea.getText(), caretPos);
+                int end = getWordEnd(textArea.getText(), caretPos);
+                if (start != -1 && end != -1) {
+                    selectedText = textArea.getText(start, end - start);
+                }
+            } catch (Exception ex) {
+                return;
+            }
+        }
+
+        if (selectedText == null || selectedText.trim().isEmpty()) {
+            return;
+        }
+
+        // Find and highlight all occurrences
+        String text = textArea.getText();
+        String wordRegex = "\\b" + Pattern.quote(selectedText.trim()) + "\\b";
+        Pattern pattern = Pattern.compile(wordRegex);
+        Matcher matcher = pattern.matcher(text);
+
+        try {
+            Highlighter highlighter = textArea.getHighlighter();
+            while (matcher.find()) {
+                highlighter.addHighlight(matcher.start(), matcher.end(), painter);
+            }
+        } catch (Exception ex) {
+            LOGGER.log(Level.WARNING, "Error highlighting text", ex);
+        }
+    }
+
+    private static int getWordStart(String text, int pos) {
+        if (pos <= 0 || pos >= text.length()) return -1;
+        
+        while (pos > 0 && isWordChar(text.charAt(pos - 1))) {
+            pos--;
+        }
+        return pos;
+    }
+
+    private static int getWordEnd(String text, int pos) {
+        if (pos < 0 || pos >= text.length()) return -1;
+        
+        while (pos < text.length() && isWordChar(text.charAt(pos))) {
+            pos++;
+        }
+        return pos;
+    }
+
+    private static boolean isWordChar(char c) {
+        return Character.isLetterOrDigit(c) || c == '_';
     }
 }

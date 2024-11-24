@@ -17,6 +17,8 @@ import java.util.logging.Level;
 
 import java.util.function.Consumer;
 
+import org.antlr.v4.runtime.tree.ParseTree;
+
 public class GhidraProject {
     private static final Logger LOGGER = Logger.getLogger(GhidraProject.class.getName());
     private String ghidraProjectName;
@@ -137,8 +139,21 @@ public class GhidraProject {
                     String className = functionObj.getString("ClassName");
                     String functionName = functionObj.getString("FunctionName");
                     String decompiledCode = functionObj.getString("DecompiledCode");
-                    LOGGER.info("Updating function: " + functionName + " in class: " + className + " with decompiled code");
-                    dbHandler.updateFunctionDecompilation(functionName, className, decompiledCode);
+                    
+                    // Parse and format the code before storing
+                    SyntaxParser parser = new SyntaxParser(dbHandler);
+                    parser.setContext(functionName, className);  // Set context for cross-reference collection
+                    ParseTree tree = parser.parseCode(decompiledCode);
+                    String formattedCode;
+                    if (tree != null) {
+                        formattedCode = parser.reprintCode(tree);
+                    } else {
+                        formattedCode = decompiledCode;
+                        LOGGER.warning("Failed to parse code for function: " + functionName + " in class: " + className);
+                    }
+                    
+                    LOGGER.info("Updating function: " + functionName + " in class: " + className + " with formatted code");
+                    dbHandler.updateFunctionDecompilation(functionName, className, formattedCode);
                 }
 
                 // Add this new section to process strings

@@ -59,12 +59,36 @@ public class SQLiteDBHandler {
                 + "value TEXT,"
                 + "type TEXT);";
 
+        String sqlCrossReferences = "CREATE TABLE IF NOT EXISTS CrossReferences ("
+            + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            + "referenceType TEXT," // 'CALLS', 'CALLED_BY', 'USES_CLASS', etc.
+            + "sourceFunction TEXT,"
+            + "sourceClass TEXT,"
+            + "targetFunction TEXT,"
+            + "targetClass TEXT,"
+            + "lineNumber INTEGER,"
+            + "FOREIGN KEY(sourceFunction, sourceClass) REFERENCES Functions(FunctionName, ParentClass),"
+            + "FOREIGN KEY(targetFunction, targetClass) REFERENCES Functions(FunctionName, ParentClass)"
+            + ");";
+
+        String sqlTypeInformation = "CREATE TABLE IF NOT EXISTS TypeInformation ("
+            + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            + "variableName TEXT,"
+            + "variableType TEXT,"
+            + "functionName TEXT,"
+            + "className TEXT,"
+            + "lineNumber INTEGER,"
+            + "FOREIGN KEY(functionName, className) REFERENCES Functions(FunctionName, ParentClass)"
+            + ");";
+
         try (Connection conn = DriverManager.getConnection(url);
              Statement stmt = conn.createStatement()) {
             stmt.execute(sqlClasses);
             stmt.execute(sqlFunctions);
             stmt.execute(sqlMachoStrings);
             stmt.execute(sqlResourceStrings);
+            stmt.execute(sqlCrossReferences);
+            stmt.execute(sqlTypeInformation);
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
@@ -354,5 +378,97 @@ public class SQLiteDBHandler {
             System.out.println(e.getMessage());
         }
         return strings;
+    }
+
+    public void insertCrossReference(String referenceType, String sourceFunction, String sourceClass, 
+                                   String targetFunction, String targetClass, int lineNumber) {
+        String sql = "INSERT INTO CrossReferences(referenceType, sourceFunction, sourceClass, "
+                   + "targetFunction, targetClass, lineNumber) VALUES(?,?,?,?,?,?)";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, referenceType);
+            pstmt.setString(2, sourceFunction);
+            pstmt.setString(3, sourceClass);
+            pstmt.setString(4, targetFunction);
+            pstmt.setString(5, targetClass);
+            pstmt.setInt(6, lineNumber);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    public void insertTypeInformation(String variableName, String variableType, 
+                                    String functionName, String className, int lineNumber) {
+        String sql = "INSERT INTO TypeInformation(variableName, variableType, functionName, "
+                   + "className, lineNumber) VALUES(?,?,?,?,?)";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, variableName);
+            pstmt.setString(2, variableType);
+            pstmt.setString(3, functionName);
+            pstmt.setString(4, className);
+            pstmt.setInt(5, lineNumber);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    public List<Map<String, String>> getCrossReferences(String functionName, String className) {
+        List<Map<String, String>> references = new ArrayList<>();
+        String sql = "SELECT * FROM CrossReferences WHERE "
+                    + "(sourceFunction = ? AND sourceClass = ?) OR "
+                    + "(targetFunction = ? AND targetClass = ?)";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, functionName);
+            pstmt.setString(2, className);
+            pstmt.setString(3, functionName);
+            pstmt.setString(4, className);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, String> reference = new HashMap<>();
+                    reference.put("referenceType", rs.getString("referenceType"));
+                    reference.put("sourceFunction", rs.getString("sourceFunction"));
+                    reference.put("sourceClass", rs.getString("sourceClass"));
+                    reference.put("targetFunction", rs.getString("targetFunction"));
+                    reference.put("targetClass", rs.getString("targetClass"));
+                    reference.put("lineNumber", String.valueOf(rs.getInt("lineNumber")));
+                    references.add(reference);
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return references;
+    }
+
+    public List<Map<String, String>> getTypeInformation(String functionName, String className) {
+        List<Map<String, String>> types = new ArrayList<>();
+        String sql = "SELECT * FROM TypeInformation WHERE functionName = ? AND className = ?";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, functionName);
+            pstmt.setString(2, className);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, String> type = new HashMap<>();
+                    type.put("variableName", rs.getString("variableName"));
+                    type.put("variableType", rs.getString("variableType"));
+                    type.put("lineNumber", String.valueOf(rs.getInt("lineNumber")));
+                    types.add(type);
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return types;
     }
 }
