@@ -296,6 +296,12 @@ public class AnalysisWindow {
         fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
         fileContentArea.setCodeFoldingEnabled(true);
     
+        // Add these lines to enable bracket matching
+        fileContentArea.setPaintMatchedBracketPair(true);
+        fileContentArea.setBracketMatchingEnabled(true);
+        fileContentArea.setAnimateBracketMatching(true);
+        fileContentArea.setPaintTabLines(true);  // This enables the vertical scope lines
+    
         SyntaxUtility.applyCustomTheme(fileContentArea);
         SyntaxUtility.setupWordHighlighting(fileContentArea);
     

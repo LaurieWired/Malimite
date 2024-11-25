@@ -59,9 +59,8 @@ public class SQLiteDBHandler {
                 + "value TEXT,"
                 + "type TEXT);";
 
-        String sqlCrossReferences = "CREATE TABLE IF NOT EXISTS CrossReferences ("
+        String sqlFunctionReferences = "CREATE TABLE IF NOT EXISTS FunctionReferences ("
             + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            + "referenceType TEXT," // 'CALLS', 'CALLED_BY', 'USES_CLASS', etc.
             + "sourceFunction TEXT,"
             + "sourceClass TEXT,"
             + "targetFunction TEXT,"
@@ -69,6 +68,15 @@ public class SQLiteDBHandler {
             + "lineNumber INTEGER,"
             + "FOREIGN KEY(sourceFunction, sourceClass) REFERENCES Functions(FunctionName, ParentClass),"
             + "FOREIGN KEY(targetFunction, targetClass) REFERENCES Functions(FunctionName, ParentClass)"
+            + ");";
+
+        String sqlLocalVariableReferences = "CREATE TABLE IF NOT EXISTS LocalVariableReferences ("
+            + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            + "variableName TEXT,"
+            + "containingFunction TEXT,"
+            + "containingClass TEXT,"
+            + "lineNumber INTEGER,"
+            + "FOREIGN KEY(containingFunction, containingClass) REFERENCES Functions(FunctionName, ParentClass)"
             + ");";
 
         String sqlTypeInformation = "CREATE TABLE IF NOT EXISTS TypeInformation ("
@@ -87,7 +95,8 @@ public class SQLiteDBHandler {
             stmt.execute(sqlFunctions);
             stmt.execute(sqlMachoStrings);
             stmt.execute(sqlResourceStrings);
-            stmt.execute(sqlCrossReferences);
+            stmt.execute(sqlFunctionReferences);
+            stmt.execute(sqlLocalVariableReferences);
             stmt.execute(sqlTypeInformation);
         } catch (SQLException e) {
             System.out.println(e.getMessage());
@@ -380,37 +389,35 @@ public class SQLiteDBHandler {
         return strings;
     }
 
-    public void insertCrossReference(String referenceType, String sourceFunction, String sourceClass, 
-                                   String targetFunction, String targetClass, int lineNumber) {
-        String sql = "INSERT INTO CrossReferences(referenceType, sourceFunction, sourceClass, "
-                   + "targetFunction, targetClass, lineNumber) VALUES(?,?,?,?,?,?)";
+    public void insertFunctionReference(String sourceFunction, String sourceClass, 
+                                      String targetFunction, String targetClass, int lineNumber) {
+        String sql = "INSERT INTO FunctionReferences(sourceFunction, sourceClass, "
+                   + "targetFunction, targetClass, lineNumber) VALUES(?,?,?,?,?)";
 
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, referenceType);
-            pstmt.setString(2, sourceFunction);
-            pstmt.setString(3, sourceClass);
-            pstmt.setString(4, targetFunction);
-            pstmt.setString(5, targetClass);
-            pstmt.setInt(6, lineNumber);
+            pstmt.setString(1, sourceFunction);
+            pstmt.setString(2, sourceClass);
+            pstmt.setString(3, targetFunction);
+            pstmt.setString(4, targetClass);
+            pstmt.setInt(5, lineNumber);
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
     }
 
-    public void insertTypeInformation(String variableName, String variableType, 
-                                    String functionName, String className, int lineNumber) {
-        String sql = "INSERT INTO TypeInformation(variableName, variableType, functionName, "
-                   + "className, lineNumber) VALUES(?,?,?,?,?)";
+    public void insertLocalVariableReference(String variableName, String containingFunction, 
+                                           String containingClass, int lineNumber) {
+        String sql = "INSERT INTO LocalVariableReferences(variableName, containingFunction, "
+                   + "containingClass, lineNumber) VALUES(?,?,?,?)";
 
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, variableName);
-            pstmt.setString(2, variableType);
-            pstmt.setString(3, functionName);
-            pstmt.setString(4, className);
-            pstmt.setInt(5, lineNumber);
+            pstmt.setString(2, containingFunction);
+            pstmt.setString(3, containingClass);
+            pstmt.setInt(4, lineNumber);
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
@@ -419,27 +426,57 @@ public class SQLiteDBHandler {
 
     public List<Map<String, String>> getCrossReferences(String functionName, String className) {
         List<Map<String, String>> references = new ArrayList<>();
-        String sql = "SELECT * FROM CrossReferences WHERE "
-                    + "(sourceFunction = ? AND sourceClass = ?) OR "
-                    + "(targetFunction = ? AND targetClass = ?)";
+        
+        // Get function references
+        String sqlFunction = "SELECT 'FUNCTION' as refType, sourceFunction, sourceClass, "
+                          + "targetFunction as target, targetClass, lineNumber FROM FunctionReferences WHERE "
+                          + "(sourceFunction = ? AND sourceClass = ?) OR "
+                          + "(targetFunction = ? AND targetClass = ?)";
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, functionName);
-            pstmt.setString(2, className);
-            pstmt.setString(3, functionName);
-            pstmt.setString(4, className);
-            
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    Map<String, String> reference = new HashMap<>();
-                    reference.put("referenceType", rs.getString("referenceType"));
-                    reference.put("sourceFunction", rs.getString("sourceFunction"));
-                    reference.put("sourceClass", rs.getString("sourceClass"));
-                    reference.put("targetFunction", rs.getString("targetFunction"));
-                    reference.put("targetClass", rs.getString("targetClass"));
-                    reference.put("lineNumber", String.valueOf(rs.getInt("lineNumber")));
-                    references.add(reference);
+        // Get local variable references
+        String sqlLocal = "SELECT 'LOCAL_VAR' as refType, containingFunction as sourceFunction, "
+                       + "containingClass as sourceClass, variableName as target, "
+                       + "NULL as targetClass, lineNumber FROM LocalVariableReferences WHERE "
+                       + "containingFunction = ? AND containingClass = ?";
+
+        try (Connection conn = DriverManager.getConnection(url)) {
+            // Query function references
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlFunction)) {
+                pstmt.setString(1, functionName);
+                pstmt.setString(2, className);
+                pstmt.setString(3, functionName);
+                pstmt.setString(4, className);
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, String> reference = new HashMap<>();
+                        reference.put("referenceType", rs.getString("refType"));
+                        reference.put("sourceFunction", rs.getString("sourceFunction"));
+                        reference.put("sourceClass", rs.getString("sourceClass"));
+                        reference.put("targetFunction", rs.getString("target"));
+                        reference.put("targetClass", rs.getString("targetClass"));
+                        reference.put("lineNumber", String.valueOf(rs.getInt("lineNumber")));
+                        references.add(reference);
+                    }
+                }
+            }
+
+            // Query local variable references
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlLocal)) {
+                pstmt.setString(1, functionName);
+                pstmt.setString(2, className);
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, String> reference = new HashMap<>();
+                        reference.put("referenceType", rs.getString("refType"));
+                        reference.put("sourceFunction", rs.getString("sourceFunction"));
+                        reference.put("sourceClass", rs.getString("sourceClass"));
+                        reference.put("targetFunction", rs.getString("target"));
+                        reference.put("targetClass", rs.getString("targetClass"));
+                        reference.put("lineNumber", String.valueOf(rs.getInt("lineNumber")));
+                        references.add(reference);
+                    }
                 }
             }
         } catch (SQLException e) {
@@ -470,5 +507,49 @@ public class SQLiteDBHandler {
             System.out.println(e.getMessage());
         }
         return types;
+    }
+
+    public void insertTypeInformation(String variableName, String variableType, 
+                                    String functionName, String className, int lineNumber) {
+        String sql = "INSERT INTO TypeInformation(variableName, variableType, functionName, "
+                   + "className, lineNumber) VALUES(?,?,?,?,?)";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, variableName);
+            pstmt.setString(2, variableType);
+            pstmt.setString(3, functionName);
+            pstmt.setString(4, className);
+            pstmt.setInt(5, lineNumber);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    public List<Map<String, String>> getLocalVariableReferences(String variableName, String className) {
+        List<Map<String, String>> references = new ArrayList<>();
+        String sql = "SELECT * FROM LocalVariableReferences WHERE variableName = ? "
+                   + "AND containingClass = ?";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, variableName);
+            pstmt.setString(2, className);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, String> reference = new HashMap<>();
+                    reference.put("variableName", rs.getString("variableName"));
+                    reference.put("containingFunction", rs.getString("containingFunction"));
+                    reference.put("containingClass", rs.getString("containingClass"));
+                    reference.put("lineNumber", String.valueOf(rs.getInt("lineNumber")));
+                    references.add(reference);
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return references;
     }
 }

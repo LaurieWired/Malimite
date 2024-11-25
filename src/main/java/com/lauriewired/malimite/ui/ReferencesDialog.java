@@ -14,7 +14,7 @@ public class ReferencesDialog {
     private static DefaultTableModel tableModel;
     private static SQLiteDBHandler dbHandler;
 
-    public static void show(JFrame parent, SQLiteDBHandler handler, String functionName, String className) {
+    public static void show(JFrame parent, SQLiteDBHandler handler, String name, String className) {
         // Check if dialog is already showing
         if (dialog != null && dialog.isVisible()) {
             dialog.toFront();
@@ -23,20 +23,30 @@ public class ReferencesDialog {
 
         dbHandler = handler;
 
-        // Create the dialog
-        dialog = new JDialog(parent, "References", false); // Non-modal dialog
+        // Determine if this is a local variable or function
+        boolean isLocalVariable = isLocalVariable(name, className);
+
+        // Create the dialog with appropriate title
+        String title = isLocalVariable ? "Variable References" : "Function References";
+        dialog = new JDialog(parent, title, false);
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
         // Create main panel with padding
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Create table model with columns
-        String[] columns = {"Type", "Source", "Target", "Line"};
+        // Create table model with appropriate columns
+        String[] columns;
+        if (isLocalVariable) {
+            columns = new String[]{"Type", "Variable", "Function", "Line"};
+        } else {
+            columns = new String[]{"Type", "Source", "Target", "Line"};
+        }
+
         tableModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return false; // Make table read-only
+                return false;
             }
         };
 
@@ -52,9 +62,22 @@ public class ReferencesDialog {
 
         // Create info panel at the top
         JPanel infoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JLabel infoLabel = new JLabel(String.format("References for %s in %s", functionName, className));
+        String infoText = isLocalVariable ? 
+            String.format("References for variable '%s' in %s", name, className) :
+            String.format("References for function '%s' in %s", name, className);
+        JLabel infoLabel = new JLabel(infoText);
         infoLabel.setFont(infoLabel.getFont().deriveFont(Font.BOLD));
         infoPanel.add(infoLabel);
+
+        // Add type information if it's a local variable
+        if (isLocalVariable) {
+            String type = getVariableType(name, className);
+            if (type != null) {
+                JLabel typeLabel = new JLabel(String.format(" (Type: %s)", type));
+                infoPanel.add(typeLabel);
+            }
+        }
+
         mainPanel.add(infoPanel, BorderLayout.NORTH);
 
         // Create button panel at the bottom
@@ -68,7 +91,11 @@ public class ReferencesDialog {
         dialog.add(mainPanel);
 
         // Load references data
-        loadReferences(functionName, className);
+        if (isLocalVariable) {
+            loadLocalVariableReferences(name, className);
+        } else {
+            loadFunctionReferences(name, className);
+        }
 
         // Size and position the dialog
         dialog.pack();
@@ -78,18 +105,65 @@ public class ReferencesDialog {
         dialog.setVisible(true);
     }
 
-    private static void loadReferences(String functionName, String className) {
+    private static boolean isLocalVariable(String name, String className) {
+        // Check TypeInformation table first
+        List<Map<String, String>> typeInfo = dbHandler.getTypeInformation(name, className);
+        if (!typeInfo.isEmpty()) {
+            return true;
+        }
+
+        // If not found in TypeInformation, check for function references
+        List<Map<String, String>> functionRefs = dbHandler.getCrossReferences(name, className);
+        return functionRefs.isEmpty(); // If no function references found, assume it's a local variable
+    }
+
+    private static String getVariableType(String variableName, String className) {
+        List<Map<String, String>> typeInfo = dbHandler.getTypeInformation(variableName, className);
+        if (!typeInfo.isEmpty()) {
+            return typeInfo.get(0).get("variableType");
+        }
+        return null;
+    }
+
+    private static void loadLocalVariableReferences(String variableName, String className) {
         // Clear existing table data
         tableModel.setRowCount(0);
 
-        // Get references from database
+        // Get local variable references
+        List<Map<String, String>> references = dbHandler.getLocalVariableReferences(variableName, className);
+
+        // Add references to table
+        for (Map<String, String> reference : references) {
+            String type = "LOCAL_VAR";
+            String variable = reference.get("variableName");
+            String function = formatReference(reference.get("containingFunction"), 
+                                           reference.get("containingClass"));
+            String line = reference.get("lineNumber");
+
+            tableModel.addRow(new Object[]{type, variable, function, line});
+        }
+
+        // Adjust column widths
+        referencesTable.getColumnModel().getColumn(0).setPreferredWidth(100); // Type
+        referencesTable.getColumnModel().getColumn(1).setPreferredWidth(150); // Variable
+        referencesTable.getColumnModel().getColumn(2).setPreferredWidth(250); // Function
+        referencesTable.getColumnModel().getColumn(3).setPreferredWidth(100); // Line
+    }
+
+    private static void loadFunctionReferences(String functionName, String className) {
+        // Clear existing table data
+        tableModel.setRowCount(0);
+
+        // Get function references
         List<Map<String, String>> references = dbHandler.getCrossReferences(functionName, className);
 
         // Add references to table
         for (Map<String, String> reference : references) {
             String type = reference.get("referenceType");
-            String source = formatReference(reference.get("sourceFunction"), reference.get("sourceClass"));
-            String target = formatReference(reference.get("targetFunction"), reference.get("targetClass"));
+            String source = formatReference(reference.get("sourceFunction"), 
+                                         reference.get("sourceClass"));
+            String target = formatReference(reference.get("targetFunction"), 
+                                         reference.get("targetClass"));
             String line = reference.get("lineNumber");
 
             tableModel.addRow(new Object[]{type, source, target, line});
@@ -103,6 +177,9 @@ public class ReferencesDialog {
     }
 
     private static String formatReference(String function, String className) {
+        if (function == null || className == null) {
+            return "Unknown";
+        }
         return String.format("%s::%s", className, function);
     }
 } 

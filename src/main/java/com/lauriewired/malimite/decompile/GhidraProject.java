@@ -140,18 +140,17 @@ public class GhidraProject {
                     String functionName = functionObj.getString("FunctionName");
                     String decompiledCode = functionObj.getString("DecompiledCode");
                     
-                    // Parse and format the code before storing
-                    SyntaxParser parser = new SyntaxParser(dbHandler);
-                    parser.setContext(functionName, className);  // Set context for cross-reference collection
-                    ParseTree tree = parser.parseCode(decompiledCode);
-                    String formattedCode;
-                    if (tree != null) {
-                        formattedCode = parser.reprintCode(tree);
-                    } else {
-                        formattedCode = decompiledCode;
-                        LOGGER.warning("Failed to parse code for function: " + functionName + " in class: " + className);
-                    }
-                    
+                    // First parse and format the code
+                    SyntaxParser parser = new SyntaxParser(null);
+                    String formattedCode = parser.parseAndFormatCode(decompiledCode);
+                    System.out.println("Formatted Code: " + formattedCode);
+
+                    // Now collect cross-references from the formatted code
+                    parser = new SyntaxParser(dbHandler);
+                    parser.setContext(functionName, className);
+                    parser.collectCrossReferences(formattedCode);
+
+                    // Store the formatted code
                     LOGGER.info("Updating function: " + functionName + " in class: " + className + " with formatted code");
                     dbHandler.updateFunctionDecompilation(functionName, className, formattedCode);
                 }
