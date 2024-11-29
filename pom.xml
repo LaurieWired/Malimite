@@ -66,6 +66,11 @@
       <artifactId>bcpkix-jdk15on</artifactId>
       <version>1.70</version>
     </dependency>
+    <dependency>
+      <groupId>com.github.javaparser</groupId>
+      <artifactId>javaparser-core</artifactId>
+      <version>3.26.2</version>
+    </dependency>
   </dependencies>
 
   <build>

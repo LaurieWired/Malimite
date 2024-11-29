@@ -7,6 +7,12 @@ import com.lauriewired.malimite.database.SQLiteDBHandler;
 import com.lauriewired.malimite.decompile.antlr.CPP14ParserBaseVisitor;
 import com.lauriewired.malimite.decompile.antlr.CPP14Lexer;
 import com.lauriewired.malimite.decompile.antlr.CPP14Parser;
+import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.printer.configuration.Indentation;
+import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
+import com.github.javaparser.printer.configuration.DefaultConfigurationOption;
+import static com.github.javaparser.printer.configuration.Indentation.IndentType.SPACES;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -18,7 +24,6 @@ public class SyntaxParser {
     private SQLiteDBHandler dbHandler;
     private String currentFunction;
     private String currentClass;
-    private static final String INDENT = "\t"; // Tab character for indentation
 
     public SyntaxParser(SQLiteDBHandler dbHandler) {
         this.dbHandler = dbHandler;
@@ -30,11 +35,20 @@ public class SyntaxParser {
     }
 
     public String parseAndFormatCode(String code) {
-        try {
-            // Clean up the input code first
-            code = cleanInputCode(code);
+        try {            
+            // Use JavaParser for formatting with proper configuration
+            CompilationUnit cu = StaticJavaParser.parse(code);
+            DefaultPrinterConfiguration config = new DefaultPrinterConfiguration();
             
-            System.out.println("Code: " + code);
+            // Set up indentation with 2 spaces
+            config.addOption(new DefaultConfigurationOption(
+                DefaultPrinterConfiguration.ConfigOption.INDENTATION,
+                new Indentation(SPACES, 2)
+            ));
+            
+            return cu.toString(config);
+
+            /* Commenting out custom formatting logic
             CharStream input = CharStreams.fromString(code);
             lexer = new CPP14Lexer(input);
             CommonTokenStream tokens = new CommonTokenStream(lexer);
@@ -47,6 +61,7 @@ public class SyntaxParser {
             }
             
             return new FormattingVisitor().visit(tree);
+            */
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error parsing code", e);
             return code;
@@ -203,11 +218,17 @@ public class SyntaxParser {
         }
     }
 
+    /*TODO: Re-implement custom formatting visitor once fully working */
+    /*
     private class FormattingVisitor extends CPP14ParserBaseVisitor<String> {
         private int indentLevel = 0;
+        private boolean wasNewline = false;
     
         @Override
         public String visitChildren(RuleNode node) {
+            // Add debug print for full node text
+            System.out.println("Processing full node text: '" + node.getText() + "'");
+            
             StringBuilder result = new StringBuilder();
             int n = node.getChildCount();
     
@@ -216,9 +237,14 @@ public class SyntaxParser {
                 String childResult = child.accept(this);
     
                 if (childResult != null) {
+                    // Debug print statement
+                    System.out.println("Processing node: '" + childResult + "'");
+                    System.out.println("Result: " + result.toString());
+
                     if (isOpeningBrace(childResult)) {
-                        result.append(" {\n").append(getIndentation());
+                        result.append(" {\n");
                         indentLevel++;
+                        result.append(getIndentation());
                     } else if (isClosingBrace(childResult)) {
                         result.append("\n");
                         indentLevel--;
@@ -227,11 +253,16 @@ public class SyntaxParser {
                         result.append("\n").append(getIndentation()).append(childResult).append(" ");
                     } else if (needsNewline(childResult)) {
                         result.append(childResult).append("\n").append(getIndentation());
+                        wasNewline = true;
                     } else {
                         result.append(childResult);
                         
-                        if (i < n - 1 && needsSpace(child, node.getChild(i + 1))) {
-                            result.append(" ");
+                        if (!wasNewline) {
+                            if (i < n - 1 && needsSpace(child, node.getChild(i + 1))) {
+                                result.append(" ");
+                            }
+                        } else {
+                            wasNewline = false;
                         }
                     }
                 }
@@ -277,8 +308,12 @@ public class SyntaxParser {
         }
     
         private boolean isControlKeyword(String text) {
-            // Add newline before control flow keywords
-            return text.matches("\\b(if|else|while|for|return|switch|do|try|catch)\\b");
+            // Special case for "else" to prevent newline before "if"
+            if (text.equals("else")) {
+                return false;
+            }
+            // Add newline before other control flow keywords
+            return text.matches("\\b(if|while|for|return|switch|do|try|catch)\\b");
         }
     
         private boolean isPunctuation(String text) {
@@ -306,21 +341,20 @@ public class SyntaxParser {
             if (token.equals("::")) return token;
             return token.trim();
         }
-    }    
+    }*/
 
-    // Add this new private method
-    private String cleanInputCode(String code) {
-        return code
-            // Replace multiple spaces with a single space
-            .replaceAll("\\s+", " ")
-            // Remove spaces around operators and punctuation
-            .replaceAll("\\s*([{}\\[\\]().,;:><+=\\-*/%&|^!])\\s*", "$1")
-            // Add single space after commas
-            .replaceAll(",", ", ")
-            // Clean up pointer/reference declarations
-            .replaceAll("\\s*([*&])\\s*", "$1")
-            // Ensure single space around keywords
-            .replaceAll("\\b(if|else|while|for|return|switch|do|try|catch)\\b", " $1 ")
-            .trim();
-    }
+    // private String cleanInputCode(String code) {
+    //     return code
+    //         // Replace multiple spaces with a single space
+    //         .replaceAll("\\s+", " ")
+    //         // Remove spaces around operators and punctuation
+    //         .replaceAll("\\s*([{}\\[\\]().,;:><+=\\-*/%&|^!])\\s*", "$1")
+    //         // Add single space after commas
+    //         .replaceAll(",", ", ")
+    //         // Clean up pointer/reference declarations
+    //         .replaceAll("\\s*([*&])\\s*", "$1")
+    //         // Ensure single space around keywords
+    //         .replaceAll("\\b(if|else|while|for|return|switch|do|try|catch)\\b", " $1 ")
+    //         .trim();
+    // }
 }

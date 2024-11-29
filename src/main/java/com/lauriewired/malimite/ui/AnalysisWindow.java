@@ -292,6 +292,8 @@ public class AnalysisWindow {
     
         // Initialize RSyntaxTextArea with syntax highlighting
         fileContentArea = new RSyntaxTextArea();
+        fileContentArea.setTabSize(2);
+        fileContentArea.setTabsEmulated(true);  // This makes it use spaces instead of tabs
         fileContentArea.setEditable(false);
         fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
         fileContentArea.setCodeFoldingEnabled(true);
