@@ -132,6 +132,12 @@ public class AnalysisWindow {
 
     // Add this near the other static variables at the top of the class
     private static String currentClassName;
+    private static String currentSelectedText;
+    private static int currentCaretPosition;
+
+    // Add this constant at the class level
+    private static final int RIGHT_PANEL_WIDTH = 300;
+    private static int lastDividerLocation = -1;  // Store the last divider location
 
     public static void show(File file, Config config) {
         SafeMenuAction.execute(() -> {
@@ -298,6 +304,12 @@ public class AnalysisWindow {
         fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
         fileContentArea.setCodeFoldingEnabled(true);
     
+        // Add cursor and selection tracking
+        fileContentArea.addCaretListener(e -> {
+            currentCaretPosition = e.getDot();
+            currentSelectedText = fileContentArea.getSelectedText();
+        });
+    
         // Add these lines to enable bracket matching
         fileContentArea.setPaintMatchedBracketPair(true);
         fileContentArea.setBracketMatchingEnabled(true);
@@ -364,16 +376,17 @@ public class AnalysisWindow {
         assistLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
         
         // Create close label
-        closeLabel = new JLabel("✕");  // Using "✕" as the close symbol
+        closeLabel = new JLabel("");
+        //closeLabel = new JLabel("✕");  // Using "✕" as the close symbol
         closeLabel.setFont(closeLabel.getFont().deriveFont(14.0f));
         closeLabel.setBorder(BorderFactory.createEmptyBorder(0, 5, 10, 5));
         closeLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        closeLabel.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent evt) {
-                toggleFunctionAssist();
-            }
-        });
+        // closeLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+        //     @Override
+        //     public void mouseClicked(java.awt.event.MouseEvent evt) {
+        //         toggleFunctionAssist();
+        //     }
+        // });
         
         headerPanel.add(assistLabel, BorderLayout.CENTER);
         headerPanel.add(closeLabel, BorderLayout.EAST);
@@ -502,13 +515,13 @@ public class AnalysisWindow {
         functionAssistPanel.add(selectionPanel, BorderLayout.CENTER);
 
         // Add the same click listener to the label for consistency
-        assistLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        assistLabel.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent evt) {
-                toggleFunctionAssist();
-            }
-        });
+        // assistLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        // assistLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+        //     @Override
+        //     public void mouseClicked(java.awt.event.MouseEvent evt) {
+        //         toggleFunctionAssist();
+        //     }
+        // });
 
         functionAssistPanel.setVisible(false); // Start with the panel hidden
 
@@ -530,7 +543,7 @@ public class AnalysisWindow {
         stringsCloseLabel.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent evt) {
-                toggleFunctionAssist();  // Reuse the same toggle since panels are linked
+                toggleRightPanel();  // Reuse the same toggle since panels are linked
             }
         });
         stringsCloseLabel.setVisible(functionAssistVisible);
@@ -559,16 +572,17 @@ public class AnalysisWindow {
         resourceStringsLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
 
         // Add close button for resource strings panel
-        resourceStringsCloseLabel = new JLabel("✕");
+        //resourceStringsCloseLabel = new JLabel("✕");
+        resourceStringsCloseLabel = new JLabel("");
         resourceStringsCloseLabel.setFont(resourceStringsCloseLabel.getFont().deriveFont(14.0f));
         resourceStringsCloseLabel.setBorder(BorderFactory.createEmptyBorder(0, 5, 10, 5));
         resourceStringsCloseLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        resourceStringsCloseLabel.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent evt) {
-                toggleFunctionAssist();  // Reuse the same toggle since panels are linked
-            }
-        });
+        // resourceStringsCloseLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+        //     @Override
+        //     public void mouseClicked(java.awt.event.MouseEvent evt) {
+        //         toggleFunctionAssist();  // Reuse the same toggle since panels are linked
+        //     }
+        // });
         resourceStringsCloseLabel.setVisible(functionAssistVisible);
 
         resourceStringsHeaderPanel.add(resourceStringsLabel, BorderLayout.CENTER);
@@ -613,7 +627,7 @@ public class AnalysisWindow {
         JPanel contentPanel = new JPanel(new BorderLayout());
         contentPanel.add(mainSplitPane, BorderLayout.CENTER);
 
-        toggleFunctionAssist(); // Change my mind. Want to show it by default and this is the easiest way to do it
+        toggleRightPanel(); // Change my mind. Want to show it by default and this is the easiest way to do it
 
         // Add save button (initially invisible)
         saveButton = new JButton("Save Changes");
@@ -1103,7 +1117,7 @@ public class AnalysisWindow {
         });
     }    
 
-    public static void toggleFunctionAssist() {
+    public static void toggleRightPanel() {
         if (functionAssistPanel != null && mainSplitPane != null) {
             functionAssistVisible = !functionAssistVisible;
             functionAssistPanel.setVisible(functionAssistVisible);
@@ -1114,12 +1128,19 @@ public class AnalysisWindow {
             resourceStringsCloseLabel.setVisible(functionAssistVisible);
 
             if (functionAssistVisible) {
-                rightSplitPane.setDividerLocation(rightSplitPane.getWidth() - 300);
+                if (lastDividerLocation == -1) {
+                    // First time opening, calculate the position
+                    lastDividerLocation = rightSplitPane.getWidth() - RIGHT_PANEL_WIDTH;
+                }
+                rightSplitPane.setDividerLocation(lastDividerLocation);
+                
                 // Set equal spacing for all three panels
                 JSplitPane topSplitPane = (JSplitPane) rightVerticalSplitPane.getTopComponent();
                 topSplitPane.setDividerLocation(0.5);  // Equal split between top two panels
                 rightVerticalSplitPane.setDividerLocation(0.66);  // Give bottom panel 1/3 of space
             } else {
+                // Store the current location before hiding
+                lastDividerLocation = rightSplitPane.getDividerLocation();
                 rightSplitPane.setDividerLocation(1.0);
             }
 
@@ -1170,17 +1191,15 @@ public class AnalysisWindow {
                     String aiResponse = get();
                     if (aiResponse != null) {
                         showFunctionAcceptanceDialog(aiResponse);
-                    } else {
+                    }
+                } catch (Exception ex) {
+                    // Only show error dialog if it's not an ApiKeyMissingException
+                    if (!(ex.getCause() instanceof AIBackend.ApiKeyMissingException)) {
                         JOptionPane.showMessageDialog(analysisFrame, 
-                            "Failed to retrieve response from AI model.", 
+                            "Error connecting to AI model: " + ex.getMessage(), 
                             "Error", 
                             JOptionPane.ERROR_MESSAGE);
                     }
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(analysisFrame, 
-                        "Error connecting to AI model: " + ex.getMessage(), 
-                        "Error", 
-                        JOptionPane.ERROR_MESSAGE);
                 }
             }
         };
@@ -1717,5 +1736,17 @@ public class AnalysisWindow {
         }
         
         return currentFunction;
+    }
+
+    public static String getCurrentSelectedText() {
+        return currentSelectedText;
+    }
+
+    public static int getCurrentCaretPosition() {
+        return currentCaretPosition;
+    }
+
+    public static RSyntaxTextArea getFileContentArea() {
+        return fileContentArea;
     }
 }

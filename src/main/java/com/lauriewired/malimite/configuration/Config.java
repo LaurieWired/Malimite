@@ -5,14 +5,16 @@ import java.util.Properties;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
+import com.lauriewired.malimite.security.KeyEncryption;
+
 public class Config {
     private static final Logger LOGGER = Logger.getLogger(Config.class.getName());
     private static final String CONFIG_FILE = "malimite.properties";
     private static final String GHIDRA_PATH_KEY = "ghidra.path";
     private static final String THEME_KEY = "app.theme";
     private static final String OS_TYPE_KEY = "os.type";
-    private static final String OPENAI_API_KEY = "openai.api.key";
-    private static final String CLAUDE_API_KEY = "claude.api.key";
+    private static final String ENCRYPTED_OPENAI_API_KEY = "openai.api.key.encrypted";
+    private static final String ENCRYPTED_CLAUDE_API_KEY = "claude.api.key.encrypted";
     private static final String LOCAL_MODEL_URL = "local.model.url";
     
     private String osType;
@@ -20,6 +22,8 @@ public class Config {
     private String theme;
     private Properties properties;
     private String configDirectory;
+    private String encryptedOpenAIApiKey;
+    private String encryptedClaudeApiKey;
 
     public Config() {
         this.osType = System.getProperty("os.name").toLowerCase();
@@ -45,6 +49,8 @@ public class Config {
                 this.ghidraPath = properties.getProperty(GHIDRA_PATH_KEY);
                 this.theme = properties.getProperty(THEME_KEY);
                 this.osType = properties.getProperty(OS_TYPE_KEY, System.getProperty("os.name").toLowerCase());
+                this.encryptedOpenAIApiKey = properties.getProperty(ENCRYPTED_OPENAI_API_KEY);
+                this.encryptedClaudeApiKey = properties.getProperty(ENCRYPTED_CLAUDE_API_KEY);
             } catch (IOException e) {
                 LOGGER.log(Level.WARNING, "Failed to load configuration file", e);
             }
@@ -96,20 +102,22 @@ public class Config {
     }
 
     public String getOpenAIApiKey() {
-        return properties.getProperty(OPENAI_API_KEY, "");
+        return encryptedOpenAIApiKey;
     }
 
     public void setOpenAIApiKey(String key) {
-        properties.setProperty(OPENAI_API_KEY, key);
+        this.encryptedOpenAIApiKey = KeyEncryption.encrypt(key);
+        properties.setProperty(ENCRYPTED_OPENAI_API_KEY, this.encryptedOpenAIApiKey);
         saveConfig();
     }
 
     public String getClaudeApiKey() {
-        return properties.getProperty(CLAUDE_API_KEY, "");
+        return encryptedClaudeApiKey;
     }
 
     public void setClaudeApiKey(String key) {
-        properties.setProperty(CLAUDE_API_KEY, key);
+        this.encryptedClaudeApiKey = KeyEncryption.encrypt(key);
+        properties.setProperty(ENCRYPTED_CLAUDE_API_KEY, this.encryptedClaudeApiKey);
         saveConfig();
     }
 

@@ -8,10 +8,13 @@ import java.nio.charset.StandardCharsets;
 import com.lauriewired.malimite.configuration.Config;
 import com.lauriewired.malimite.ui.AnalysisWindow;
 import com.lauriewired.malimite.configuration.Project;
+import com.lauriewired.malimite.security.KeyEncryption;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import javax.swing.*;
 
 public class AIBackend {
     public static class Model {
@@ -64,28 +67,47 @@ public class AIBackend {
         return String.format(DEFAULT_PROMPT, targetLanguage, targetLanguage);
     }
 
-    public static String sendToModel(String provider, String modelId, String inputText, Config config) throws IOException {
-        String apiUrl;
-        String apiKey = null;
+    public static class ApiKeyMissingException extends Exception {
+        public ApiKeyMissingException(String message) {
+            super(message);
+        }
+    }
 
+    public static String sendToModel(String provider, String modelId, String inputText, Config config) throws IOException, ApiKeyMissingException {
         switch (provider.toLowerCase()) {
             case "openai":
-                apiUrl = OPENAI_API_URL;
-                apiKey = config.getOpenAIApiKey();
-                return sendOpenAIRequest(apiUrl, apiKey, inputText, modelId);
+                String openaiKey = KeyEncryption.decrypt(config.getOpenAIApiKey());
+                if (openaiKey == null || openaiKey.trim().isEmpty()) {
+                    showApiKeyMissingDialog("OpenAI");
+                    throw new ApiKeyMissingException("OpenAI API key is missing");
+                }
+                return sendOpenAIRequest(OPENAI_API_URL, openaiKey, inputText, modelId);
 
             case "claude":
-                apiUrl = CLAUDE_API_URL;
-                apiKey = config.getClaudeApiKey();
-                return sendClaudeRequest(apiUrl, apiKey, inputText, modelId);
+                String claudeKey = KeyEncryption.decrypt(config.getClaudeApiKey());
+                if (claudeKey == null || claudeKey.trim().isEmpty()) {
+                    showApiKeyMissingDialog("Claude");
+                    throw new ApiKeyMissingException("Claude API key is missing");
+                }
+                return sendClaudeRequest(CLAUDE_API_URL, claudeKey, inputText, modelId);
 
             case "local":
-                apiUrl = config.getLocalModelUrl();
-                return sendLocalModelRequest(apiUrl, inputText);
+                return sendLocalModelRequest(config.getLocalModelUrl(), inputText);
 
             default:
                 throw new IllegalArgumentException("Unsupported provider: " + provider);
         }
+    }
+
+    private static void showApiKeyMissingDialog(String provider) {
+        SwingUtilities.invokeLater(() -> {
+            JOptionPane.showMessageDialog(
+                null,
+                provider + " API key is not set. Please set it in Preferences.",
+                "API Key Missing",
+                JOptionPane.WARNING_MESSAGE
+            );
+        });
     }
 
     private static String sendOpenAIRequest(String apiUrl, String apiKey, String inputText, String modelId) throws IOException {

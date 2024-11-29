@@ -23,7 +23,7 @@ public class ReferenceHandler {
         });
     }
 
-    private static void handleReferenceRequest(RSyntaxTextArea textArea, JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName) {
+    public static void handleReferenceRequest(RSyntaxTextArea textArea, JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName) {
         String selectedText = textArea.getSelectedText();
         
         if (selectedText == null || selectedText.trim().isEmpty()) {
@@ -41,6 +41,11 @@ public class ReferenceHandler {
 
         // Show the references dialog
         ReferencesDialog.show(parent, dbHandler, selectedText, className, functionName);
+    }
+
+    public static void handleReferenceRequest(JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName) {
+        // Show the references dialog without a specific selection
+        ReferencesDialog.show(parent, dbHandler, null, className, functionName);
     }
 
     private static String getWordAtCursor(RSyntaxTextArea textArea) {

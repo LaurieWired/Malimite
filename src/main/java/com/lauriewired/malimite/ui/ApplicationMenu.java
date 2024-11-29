@@ -7,6 +7,11 @@ import com.lauriewired.malimite.configuration.Config;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 
+import com.lauriewired.malimite.database.SQLiteDBHandler;
+import com.lauriewired.malimite.ui.AnalysisWindow;
+import com.lauriewired.malimite.ui.ReferenceHandler;
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+
 public class ApplicationMenu {
     private final JFrame parentFrame;
     private final JTree fileTree;
@@ -30,13 +35,6 @@ public class ApplicationMenu {
     private JMenu createFileMenu() {
         JMenu fileMenu = new JMenu("File");
         fileMenu.setMnemonic(KeyEvent.VK_F);
-
-        addMenuItem(fileMenu, "Save Analysis...", e -> 
-            JOptionPane.showMessageDialog(parentFrame, "Save Analysis feature coming soon!"),
-            KeyStroke.getKeyStroke(KeyEvent.VK_S, KeyEvent.CTRL_DOWN_MASK)
-        );
-
-        fileMenu.addSeparator();
 
         addMenuItem(fileMenu, "Preferences...", e -> {
             SwingUtilities.invokeLater(() -> PreferencesDialog.show(parentFrame, config));
@@ -93,25 +91,26 @@ public class ApplicationMenu {
         JMenu windowsMenu = new JMenu("Windows");
         windowsMenu.setMnemonic(KeyEvent.VK_W);
 
-        addMenuItem(windowsMenu, "Function Assist", e -> {
-            System.out.println("Function Assist menu item clicked");
-            AnalysisWindow.toggleFunctionAssist();
+        addMenuItem(windowsMenu, "Right Panel", e -> {
+            System.out.println("Right Panel toggle clicked");
+            AnalysisWindow.toggleRightPanel();
         },
             KeyStroke.getKeyStroke(KeyEvent.VK_L, config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
         );
 
-        addMenuItem(windowsMenu, "Mach-O Strings", e -> {
-            System.out.println("Mach-O Strings menu item clicked");
-            AnalysisWindow.toggleFunctionAssist();
-        },
-            KeyStroke.getKeyStroke(KeyEvent.VK_S, config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
-        );
+        windowsMenu.addSeparator();
 
-        addMenuItem(windowsMenu, "Resource Strings", e -> {
-            System.out.println("Resource Strings menu item clicked");
-            AnalysisWindow.toggleFunctionAssist();
+        addMenuItem(windowsMenu, "Xrefs", e -> {
+            String className = AnalysisWindow.getCurrentClassName();
+            String functionName = AnalysisWindow.getCurrentFunctionName();
+            SQLiteDBHandler dbHandler = AnalysisWindow.getDbHandler();
+            RSyntaxTextArea textArea = AnalysisWindow.getFileContentArea();
+            
+            if (className != null && dbHandler != null && textArea != null) {
+                ReferenceHandler.handleReferenceRequest(textArea, parentFrame, className, dbHandler, functionName);
+            }
         },
-            KeyStroke.getKeyStroke(KeyEvent.VK_R, config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
+            KeyStroke.getKeyStroke(KeyEvent.VK_X, KeyEvent.CTRL_DOWN_MASK)
         );
 
         return windowsMenu;
