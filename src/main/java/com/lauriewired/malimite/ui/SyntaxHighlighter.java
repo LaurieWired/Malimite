@@ -22,9 +22,9 @@ import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class SyntaxUtility {
+public class SyntaxHighlighter {
 
-    private static final Logger LOGGER = Logger.getLogger(SyntaxUtility.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(SyntaxHighlighter.class.getName());
     private static final Color HIGHLIGHT_COLOR = new Color(255, 255, 0, 70);
 
     public static void applyCustomTheme(RSyntaxTextArea textArea) {

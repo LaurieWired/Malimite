@@ -304,8 +304,8 @@ public class AnalysisWindow {
         fileContentArea.setAnimateBracketMatching(true);
         fileContentArea.setPaintTabLines(true);  // This enables the vertical scope lines
     
-        SyntaxUtility.applyCustomTheme(fileContentArea);
-        SyntaxUtility.setupWordHighlighting(fileContentArea);
+        SyntaxHighlighter.applyCustomTheme(fileContentArea);
+        SyntaxHighlighter.setupWordHighlighting(fileContentArea);
     
         // Add RSyntaxTextArea to RTextScrollPane
         RTextScrollPane contentScrollPane = new RTextScrollPane(fileContentArea);
@@ -1680,5 +1680,42 @@ public class AnalysisWindow {
 
     public static SQLiteDBHandler getDbHandler() {
         return dbHandler;
+    }
+
+    public static String getCurrentFunctionName() {
+        if (fileContentArea == null) return "";
+        
+        String content = fileContentArea.getText();
+        int caretPosition = fileContentArea.getCaretPosition();
+        
+        // Split the content into lines for processing
+        String[] lines = content.split("\n");
+        int currentLine = 0;
+        int currentPosition = 0;
+        
+        // Find which line contains the caret
+        while (currentPosition < caretPosition && currentLine < lines.length) {
+            currentPosition += lines[currentLine].length() + 1; // +1 for newline
+            currentLine++;
+        }
+        
+        // Search backwards from current line to find function declaration
+        String currentFunction = "";
+        for (int i = currentLine - 1; i >= 0; i--) {
+            String line = lines[i].trim();
+            
+            // Look for function marker comment
+            if (line.startsWith("// Function: ")) {
+                currentFunction = line.substring("// Function: ".length()).trim();
+                break;
+            }
+            
+            // If we hit another function's end or the class declaration, stop searching
+            if (line.startsWith("// Function: ") || line.startsWith("// Class: ")) {
+                break;
+            }
+        }
+        
+        return currentFunction;
     }
 }

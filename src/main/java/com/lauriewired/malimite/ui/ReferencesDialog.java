@@ -14,7 +14,7 @@ public class ReferencesDialog {
     private static DefaultTableModel tableModel;
     private static SQLiteDBHandler dbHandler;
 
-    public static void show(JFrame parent, SQLiteDBHandler handler, String name, String className) {
+    public static void show(JFrame parent, SQLiteDBHandler handler, String name, String className, String functionName) {
         // Check if dialog is already showing
         if (dialog != null && dialog.isVisible()) {
             dialog.toFront();
@@ -24,7 +24,7 @@ public class ReferencesDialog {
         dbHandler = handler;
 
         // Determine if this is a local variable or function
-        boolean isLocalVariable = isLocalVariable(name, className);
+        boolean isLocalVariable = isLocalVariable(name, className, functionName);
 
         // Create the dialog with appropriate title
         String title = isLocalVariable ? "Variable References" : "Function References";
@@ -64,7 +64,7 @@ public class ReferencesDialog {
         JPanel infoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         String infoText = isLocalVariable ? 
             String.format("References for variable '%s' in %s", name, className) :
-            String.format("References for function '%s' in %s", name, className);
+            String.format("References for function '%s'", name);
         JLabel infoLabel = new JLabel(infoText);
         infoLabel.setFont(infoLabel.getFont().deriveFont(Font.BOLD));
         infoPanel.add(infoLabel);
@@ -92,8 +92,10 @@ public class ReferencesDialog {
 
         // Load references data
         if (isLocalVariable) {
-            loadLocalVariableReferences(name, className);
+            System.out.println("Loading local variable references for " + name + " in " + className);
+            loadLocalVariableReferences(name, className, functionName);
         } else {
+            System.out.println("Loading function references for " + name + " in " + className);
             loadFunctionReferences(name, className);
         }
 
@@ -105,16 +107,27 @@ public class ReferencesDialog {
         dialog.setVisible(true);
     }
 
-    private static boolean isLocalVariable(String name, String className) {
-        // Check TypeInformation table first
-        List<Map<String, String>> typeInfo = dbHandler.getTypeInformation(name, className);
-        if (!typeInfo.isEmpty()) {
-            return true;
+    private static boolean isLocalVariable(String name, String className, String functionName) {
+        // First check if it's a known function
+        if (dbHandler.isFunctionName(name)) {
+            return false; // It's a function
         }
 
-        // If not found in TypeInformation, check for function references
-        List<Map<String, String>> functionRefs = dbHandler.getCrossReferences(name, className);
-        return functionRefs.isEmpty(); // If no function references found, assume it's a local variable
+
+        // Then check if it's a known variable in TypeInformation
+        List<Map<String, String>> typeInfo = dbHandler.getTypeInformation(name, className);
+        if (!typeInfo.isEmpty()) {
+            return true; // It's a variable with type information
+        }
+
+        // Check for local variable references
+        List<Map<String, String>> localVarRefs = dbHandler.getLocalVariableReferences(name, className, functionName);
+        if (!localVarRefs.isEmpty()) {
+            return true; // It's referenced as a local variable
+        }
+
+        // If we can't definitively determine it's a variable, assume it's a function
+        return false;
     }
 
     private static String getVariableType(String variableName, String className) {
@@ -125,12 +138,12 @@ public class ReferencesDialog {
         return null;
     }
 
-    private static void loadLocalVariableReferences(String variableName, String className) {
+    private static void loadLocalVariableReferences(String variableName, String className, String functionName) {
         // Clear existing table data
         tableModel.setRowCount(0);
 
         // Get local variable references
-        List<Map<String, String>> references = dbHandler.getLocalVariableReferences(variableName, className);
+        List<Map<String, String>> references = dbHandler.getLocalVariableReferences(variableName, className, functionName);
 
         // Add references to table
         for (Map<String, String> reference : references) {
@@ -155,7 +168,7 @@ public class ReferencesDialog {
         tableModel.setRowCount(0);
 
         // Get function references
-        List<Map<String, String>> references = dbHandler.getCrossReferences(functionName, className);
+        List<Map<String, String>> references = dbHandler.getFunctionCrossReferences(functionName);
 
         // Add references to table
         for (Map<String, String> reference : references) {

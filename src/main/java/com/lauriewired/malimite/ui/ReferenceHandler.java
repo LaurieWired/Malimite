@@ -12,18 +12,18 @@ import com.lauriewired.malimite.database.SQLiteDBHandler;
 public class ReferenceHandler {
     private static final Pattern IDENTIFIER_PATTERN = Pattern.compile("[a-zA-Z_$][a-zA-Z0-9_$]*");
 
-    public static void attachTo(RSyntaxTextArea textArea, JFrame parent, String className, SQLiteDBHandler dbHandler) {
+    public static void attachTo(RSyntaxTextArea textArea, JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName) {
         textArea.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
                 if (e.getKeyChar() == 'x' || e.getKeyChar() == 'X') {
-                    handleReferenceRequest(textArea, parent, className, dbHandler);
+                    handleReferenceRequest(textArea, parent, className, dbHandler, functionName);
                 }
             }
         });
     }
 
-    private static void handleReferenceRequest(RSyntaxTextArea textArea, JFrame parent, String className, SQLiteDBHandler dbHandler) {
+    private static void handleReferenceRequest(RSyntaxTextArea textArea, JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName) {
         String selectedText = textArea.getSelectedText();
         
         if (selectedText == null || selectedText.trim().isEmpty()) {
@@ -40,7 +40,7 @@ public class ReferenceHandler {
         }
 
         // Show the references dialog
-        ReferencesDialog.show(parent, dbHandler, selectedText, className);
+        ReferencesDialog.show(parent, dbHandler, selectedText, className, functionName);
     }
 
     private static String getWordAtCursor(RSyntaxTextArea textArea) {

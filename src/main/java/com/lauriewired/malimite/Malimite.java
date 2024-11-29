@@ -5,7 +5,7 @@ import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.lauriewired.malimite.configuration.Config;
 import com.lauriewired.malimite.ui.AnalysisWindow;
-import com.lauriewired.malimite.ui.SyntaxUtility;
+import com.lauriewired.malimite.ui.SyntaxHighlighter;
 import com.lauriewired.malimite.ui.SafeMenuAction;
 import com.lauriewired.malimite.ui.ApplicationMenu;
 import com.lauriewired.malimite.utils.FileProcessing;
@@ -95,7 +95,7 @@ public class Malimite {
                         RSyntaxTextArea textArea = (RSyntaxTextArea)comp;
                         // Force a clean reset of the syntax theme
                         textArea.setBackground(UIManager.getColor("Panel.background"));
-                        SyntaxUtility.applyCustomTheme(textArea);
+                        SyntaxHighlighter.applyCustomTheme(textArea);
                     }
                 }
             }

@@ -140,10 +140,11 @@ public class GhidraProject {
                     String functionName = functionObj.getString("FunctionName");
                     String decompiledCode = functionObj.getString("DecompiledCode");
                     
+                    
                     // First parse and format the code
                     SyntaxParser parser = new SyntaxParser(null);
                     String formattedCode = parser.parseAndFormatCode(decompiledCode);
-                    System.out.println("Formatted Code: " + formattedCode);
+                    //System.out.println("Formatted Code: " + formattedCode);
 
                     // Now collect cross-references from the formatted code
                     parser = new SyntaxParser(dbHandler);
