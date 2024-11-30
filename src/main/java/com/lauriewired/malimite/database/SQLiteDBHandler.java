@@ -3,7 +3,6 @@ package com.lauriewired.malimite.database;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -19,6 +18,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
+
+import com.lauriewired.malimite.decompile.SyntaxParser;
 
 public class SQLiteDBHandler { 
     private String url;
@@ -265,35 +266,76 @@ public class SQLiteDBHandler {
     }
 
     public void updateFunctionDecompilation(String functionName, String className, String decompiledCode) {
-        String sql = "INSERT INTO Functions(FunctionName, ParentClass, DecompilationCode) "
-                   + "VALUES(?, ?, ?) "
-                   + "ON CONFLICT(FunctionName, ParentClass) "
-                   + "DO UPDATE SET DecompilationCode = ?";
+        // First, clear all existing references for this function
+        clearFunctionReferences(functionName, className);
+        
+        // Update the function's decompilation code
+        String sql = "UPDATE Functions SET DecompilationCode = ? "
+                   + "WHERE FunctionName = ? AND ParentClass = ?";
 
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, functionName);
-            pstmt.setString(2, className);
-            pstmt.setString(3, decompiledCode);
-            pstmt.setString(4, decompiledCode);
+            pstmt.setString(1, decompiledCode);
+            pstmt.setString(2, functionName);
+            pstmt.setString(3, className);
             int rowsAffected = pstmt.executeUpdate();
-            System.out.println("Database update for " + functionName + " affected " + rowsAffected + " rows");
             
-            // Verify the update
-            String verifySQL = "SELECT DecompilationCode FROM Functions WHERE FunctionName = ? AND ParentClass = ?";
-            try (PreparedStatement verifyStmt = conn.prepareStatement(verifySQL)) {
-                verifyStmt.setString(1, functionName);
-                verifyStmt.setString(2, className);
-                try (ResultSet rs = verifyStmt.executeQuery()) {
-                    if (rs.next()) {
-                        String storedCode = rs.getString("DecompilationCode");
-                        System.out.println("Verification - Stored code matches input: " + 
-                            storedCode.equals(decompiledCode));
-                    }
+            if (rowsAffected == 0) {
+                // If no rows were updated, insert a new record
+                sql = "INSERT INTO Functions(FunctionName, ParentClass, DecompilationCode) VALUES(?, ?, ?)";
+                try (PreparedStatement insertStmt = conn.prepareStatement(sql)) {
+                    insertStmt.setString(1, functionName);
+                    insertStmt.setString(2, className);
+                    insertStmt.setString(3, decompiledCode);
+                    rowsAffected = insertStmt.executeUpdate();
                 }
             }
+            
+            // Create a new SyntaxParser and reparse the updated function
+            SyntaxParser parser = new SyntaxParser(this);
+            parser.setContext(functionName, className);
+            parser.collectCrossReferences(decompiledCode);
+            
+            System.out.println("Database update for " + functionName + " affected " + rowsAffected + " rows");
         } catch (SQLException e) {
             System.err.println("Error updating function decompilation: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void clearFunctionReferences(String functionName, String className) {
+        // Delete from FunctionReferences where this function is the source
+        String sqlFuncRefs = "DELETE FROM FunctionReferences WHERE sourceFunction = ? AND sourceClass = ?";
+        
+        // Delete from LocalVariableReferences for this function
+        String sqlVarRefs = "DELETE FROM LocalVariableReferences WHERE containingFunction = ? AND containingClass = ?";
+        
+        // Delete from TypeInformation for this function
+        String sqlTypeInfo = "DELETE FROM TypeInformation WHERE functionName = ? AND className = ?";
+        
+        try (Connection conn = DriverManager.getConnection(url)) {
+            // Clear function references
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlFuncRefs)) {
+                pstmt.setString(1, functionName);
+                pstmt.setString(2, className);
+                pstmt.executeUpdate();
+            }
+            
+            // Clear variable references
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlVarRefs)) {
+                pstmt.setString(1, functionName);
+                pstmt.setString(2, className);
+                pstmt.executeUpdate();
+            }
+            
+            // Clear type information
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlTypeInfo)) {
+                pstmt.setString(1, functionName);
+                pstmt.setString(2, className);
+                pstmt.executeUpdate();
+            }
+        } catch (SQLException e) {
+            System.err.println("Error clearing function references: " + e.getMessage());
             e.printStackTrace();
         }
     }

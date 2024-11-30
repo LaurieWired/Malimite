@@ -140,6 +140,8 @@ public class GhidraProject {
                     String functionName = functionObj.getString("FunctionName");
                     String decompiledCode = functionObj.getString("DecompiledCode");
                     
+                    // Remove Ghidra comments before parsing
+                    decompiledCode = decompiledCode.replaceAll("/\\*.*\\*/", "");  // Ghidra comments
                     
                     // First parse and format the code
                     SyntaxParser parser = new SyntaxParser(null);

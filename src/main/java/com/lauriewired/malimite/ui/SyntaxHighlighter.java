@@ -17,6 +17,8 @@ import org.fife.ui.rtextarea.SmartHighlightPainter;
 import javax.swing.text.Highlighter;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -26,6 +28,7 @@ public class SyntaxHighlighter {
 
     private static final Logger LOGGER = Logger.getLogger(SyntaxHighlighter.class.getName());
     private static final Color HIGHLIGHT_COLOR = new Color(255, 255, 0, 70);
+    private static final List<Object> wordHighlights = new ArrayList<>(); // Track word highlights
 
     public static void applyCustomTheme(RSyntaxTextArea textArea) {
         // Get the current theme's background color from UIManager¬
@@ -101,6 +104,12 @@ public class SyntaxHighlighter {
             //gutter.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
         }
     
+        // Add these lines after setting the background colors
+        Color selectionColor = isDarkTheme ? 
+            new Color(51, 153, 255, 90) :  // Semi-transparent blue for dark theme
+            new Color(51, 153, 255, 50);   // Lighter blue for light theme
+        textArea.setSelectionColor(selectionColor);
+    
         textArea.revalidate();
         textArea.repaint();
     }    
@@ -119,73 +128,75 @@ public class SyntaxHighlighter {
     }
 
     public static void setupWordHighlighting(RSyntaxTextArea textArea) {
-        Highlighter.HighlightPainter painter = new SmartHighlightPainter(HIGHLIGHT_COLOR);
-
-        textArea.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                highlightSelectedWord(textArea, painter);
-            }
-        });
-
-        textArea.addCaretListener(e -> highlightSelectedWord(textArea, painter));
-    }
-
-    private static void highlightSelectedWord(RSyntaxTextArea textArea, Highlighter.HighlightPainter painter) {
-        // Clear previous highlights
-        textArea.getHighlighter().removeAllHighlights();
-
-        // Get the selected word
-        String selectedText = textArea.getSelectedText();
-        if (selectedText == null || selectedText.trim().isEmpty()) {
+        // Use a distinct color for word highlights
+        Color wordHighlightColor = HIGHLIGHT_COLOR;
+        Highlighter.HighlightPainter painter = new SmartHighlightPainter(wordHighlightColor);
+    
+        // Add a caret listener to dynamically highlight words at the caret
+        textArea.addCaretListener(e -> {
             try {
                 int caretPos = textArea.getCaretPosition();
-                int start = getWordStart(textArea.getText(), caretPos);
-                int end = getWordEnd(textArea.getText(), caretPos);
-                if (start != -1 && end != -1) {
-                    selectedText = textArea.getText(start, end - start);
-                }
+                highlightWordAtCaret(textArea, caretPos, painter);
             } catch (Exception ex) {
+                LOGGER.log(Level.WARNING, "Error during word highlighting", ex);
+            }
+        });
+    }
+
+    private static void highlightWordAtCaret(RSyntaxTextArea textArea, int caretPos, Highlighter.HighlightPainter painter) {
+        try {
+            // Remove only word highlights
+            Highlighter highlighter = textArea.getHighlighter();
+            for (Object highlight : wordHighlights) {
+                highlighter.removeHighlight(highlight);
+            }
+            wordHighlights.clear(); // Clear the tracking list
+
+            // Get the word at the caret or the selected text
+            String selectedText = textArea.getSelectedText();
+            if (selectedText == null || selectedText.trim().isEmpty()) {
+                selectedText = getWordAtCaret(textArea.getText(), caretPos);
+            }
+
+            if (selectedText == null || selectedText.trim().isEmpty()) {
                 return;
             }
-        }
 
-        if (selectedText == null || selectedText.trim().isEmpty()) {
-            return;
-        }
+            // Highlight all occurrences of the word
+            String text = textArea.getText();
+            String wordRegex = "\\b" + Pattern.quote(selectedText.trim()) + "\\b";
+            Pattern pattern = Pattern.compile(wordRegex);
+            Matcher matcher = pattern.matcher(text);
 
-        // Find and highlight all occurrences
-        String text = textArea.getText();
-        String wordRegex = "\\b" + Pattern.quote(selectedText.trim()) + "\\b";
-        Pattern pattern = Pattern.compile(wordRegex);
-        Matcher matcher = pattern.matcher(text);
-
-        try {
-            Highlighter highlighter = textArea.getHighlighter();
             while (matcher.find()) {
-                highlighter.addHighlight(matcher.start(), matcher.end(), painter);
+                Object highlight = highlighter.addHighlight(matcher.start(), matcher.end(), painter);
+                wordHighlights.add(highlight); // Track this highlight
             }
         } catch (Exception ex) {
             LOGGER.log(Level.WARNING, "Error highlighting text", ex);
         }
     }
 
-    private static int getWordStart(String text, int pos) {
-        if (pos <= 0 || pos >= text.length()) return -1;
-        
-        while (pos > 0 && isWordChar(text.charAt(pos - 1))) {
-            pos--;
+    private static String getWordAtCaret(String text, int caretPos) {
+        if (caretPos < 0 || caretPos >= text.length()) return null;
+    
+        int start = caretPos;
+        int end = caretPos;
+    
+        // Find the start of the word
+        while (start > 0 && isWordChar(text.charAt(start - 1))) {
+            start--;
         }
-        return pos;
-    }
-
-    private static int getWordEnd(String text, int pos) {
-        if (pos < 0 || pos >= text.length()) return -1;
-        
-        while (pos < text.length() && isWordChar(text.charAt(pos))) {
-            pos++;
+    
+        // Find the end of the word
+        while (end < text.length() && isWordChar(text.charAt(end))) {
+            end++;
         }
-        return pos;
+    
+        if (start < end) {
+            return text.substring(start, end);
+        }
+        return null;
     }
 
     private static boolean isWordChar(char c) {

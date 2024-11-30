@@ -1044,6 +1044,34 @@ public class AnalysisWindow {
         }
     }
 
+    private static void displayFunctionDecompilation(String functionName, String className) {
+        try {
+            // Update the function list in the function assist panel
+            FileProcessing.updateFunctionList(functionAssistPanel, dbHandler, className);
+            
+            String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className);
+            if (functionDecompilation != null && !functionDecompilation.isEmpty()) {
+                // Only add headers if they don't already exist
+                String content = functionDecompilation;
+                if (!content.trim().startsWith("// Class:") && !content.trim().startsWith("// Function:")) {
+                    StringBuilder contentBuilder = new StringBuilder();
+                    contentBuilder.append("// Class: ").append(className).append("\n");
+                    contentBuilder.append("// Function: ").append(functionName).append("\n\n");
+                    contentBuilder.append(functionDecompilation);
+                    content = contentBuilder.toString();
+                }
+
+                fileContentArea.setText(content);
+                fileContentArea.setCaretPosition(0);
+            } else {
+                fileContentArea.setText("No decompilation available for function " + functionName);
+            }
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error displaying decompilation for " + functionName, ex);
+            fileContentArea.setText("Error loading decompilation for " + functionName);
+        }
+    }
+
     private static void displayClassDecompilation(String className) {
         try {
             // Update the function list in the function assist panel
@@ -1060,12 +1088,20 @@ public class AnalysisWindow {
 
             // Build the complete decompilation by combining all function decompilations
             StringBuilder fullDecompilation = new StringBuilder();
-            fullDecompilation.append("// Class: ").append(className).append("\n\n");
+            
+            // Only add class header if it's not already present
+            String firstFunction = dbHandler.getFunctionDecompilation(functions.get(0), className);
+            if (firstFunction == null || !firstFunction.trim().startsWith("// Class:")) {
+                fullDecompilation.append("// Class: ").append(className).append("\n\n");
+            }
 
             for (String functionName : functions) {
                 String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className);
                 if (functionDecompilation != null && !functionDecompilation.isEmpty()) {
-                    fullDecompilation.append("// Function: ").append(functionName).append("\n");
+                    // Only add function header if it's not already present
+                    if (!functionDecompilation.trim().startsWith("// Function:")) {
+                        fullDecompilation.append("// Function: ").append(functionName).append("\n");
+                    }
                     fullDecompilation.append(functionDecompilation).append("\n\n");
                 }
             }
@@ -1079,29 +1115,6 @@ public class AnalysisWindow {
         } catch (Exception ex) {
             LOGGER.log(Level.SEVERE, "Error displaying decompilation for " + className, ex);
             fileContentArea.setText("Error loading decompilation for " + className);
-        }
-    }
-
-    private static void displayFunctionDecompilation(String functionName, String className) {
-        try {
-            // Update the function list in the function assist panel
-            FileProcessing.updateFunctionList(functionAssistPanel, dbHandler, className);
-            
-            String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className);
-            if (functionDecompilation != null && !functionDecompilation.isEmpty()) {
-                StringBuilder content = new StringBuilder();
-                content.append("// Class: ").append(className).append("\n");
-                content.append("// Function: ").append(functionName).append("\n\n");
-                content.append(functionDecompilation);
-
-                fileContentArea.setText(content.toString());
-                fileContentArea.setCaretPosition(0);
-            } else {
-                fileContentArea.setText("No decompilation available for function " + functionName);
-            }
-        } catch (Exception ex) {
-            LOGGER.log(Level.SEVERE, "Error displaying decompilation for " + functionName, ex);
-            fileContentArea.setText("Error loading decompilation for " + functionName);
         }
     }
 
@@ -1266,8 +1279,7 @@ public class AnalysisWindow {
                 JOptionPane.ERROR_MESSAGE);
             return;
         }
-        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-        String className = node.getUserObject().toString();
+        String className = getCurrentClassName();
 
         // Map to track which function names the user has confirmed
         Map<JCheckBox, String> checkboxToCodeMap = new HashMap<>();
@@ -1321,8 +1333,19 @@ public class AnalysisWindow {
                     String newCode = entry.getValue();
                     String functionName = selectedFunctionNames.get(functionIndex);
 
+                    // Ensure comments are present
+                    if (!newCode.trim().startsWith("// Class:") && !newCode.trim().startsWith("// Function:")) {
+                        StringBuilder contentBuilder = new StringBuilder();
+                        contentBuilder.append("// Class: ").append(className).append("\n");
+                        contentBuilder.append("// Function: ").append(functionName).append("\n\n");
+                        contentBuilder.append(newCode);
+                        newCode = contentBuilder.toString();
+                    }
+
                     // Update database and verify
                     dbHandler.updateFunctionDecompilation(functionName, className, newCode);
+                    System.out.println("Updated function: " + functionName);
+                    System.out.println("Class: " + className);
                     String verifyUpdate = dbHandler.getFunctionDecompilation(functionName, className);
                     if (verifyUpdate != null && verifyUpdate.equals(newCode)) {
                         anyUpdates = true;
@@ -1370,6 +1393,8 @@ public class AnalysisWindow {
 
         // Update the database
         dbHandler.updateFunctionDecompilation(functionName, className, newCode);
+        System.out.println("Updated function: " + functionName);
+        System.out.println("Class: " + className);
 
         // Reset editing state
         fileContentArea.setEditable(false);
