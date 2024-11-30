@@ -7,26 +7,23 @@ import com.lauriewired.malimite.database.SQLiteDBHandler;
 import com.lauriewired.malimite.decompile.antlr.CPP14ParserBaseVisitor;
 import com.lauriewired.malimite.decompile.antlr.CPP14Lexer;
 import com.lauriewired.malimite.decompile.antlr.CPP14Parser;
-import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.printer.configuration.Indentation;
-import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
-import com.github.javaparser.printer.configuration.DefaultConfigurationOption;
-import static com.github.javaparser.printer.configuration.Indentation.IndentType.SPACES;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class SyntaxParser {
-    private CPP14Lexer lexer;
-    private CPP14Parser parser;
+    private CPP14Lexer lexer = new CPP14Lexer(null);
+    private CPP14Parser parser = new CPP14Parser(new CommonTokenStream(lexer));
     private static final Logger LOGGER = Logger.getLogger(SyntaxParser.class.getName());
     private SQLiteDBHandler dbHandler;
     private String currentFunction;
     private String currentClass;
+    private String formattedCode;
 
     public SyntaxParser(SQLiteDBHandler dbHandler) {
         this.dbHandler = dbHandler;
+        lexer.removeErrorListeners();
+        parser.removeErrorListeners();
     }
 
     public void setContext(String functionName, String className) {
@@ -36,32 +33,14 @@ public class SyntaxParser {
 
     public String parseAndFormatCode(String code) {
         try {            
-            // Use JavaParser for formatting with proper configuration
-            CompilationUnit cu = StaticJavaParser.parse(code);
-            DefaultPrinterConfiguration config = new DefaultPrinterConfiguration();
-            
-            // Set up indentation with 2 spaces
-            config.addOption(new DefaultConfigurationOption(
-                DefaultPrinterConfiguration.ConfigOption.INDENTATION,
-                new Indentation(SPACES, 2)
-            ));
-            
-            return cu.toString(config);
-
-            /* Commenting out custom formatting logic
             CharStream input = CharStreams.fromString(code);
-            lexer = new CPP14Lexer(input);
+            lexer.setInputStream(input);
+            
             CommonTokenStream tokens = new CommonTokenStream(lexer);
-            parser = new CPP14Parser(tokens);
+            parser.setTokenStream(tokens);
             
-            ParseTree tree = parser.translationUnit();
-            if (tree == null) {
-                LOGGER.warning("Failed to parse code");
-                return code;
-            }
-            
-            return new FormattingVisitor().visit(tree);
-            */
+            // Temporarily return unformatted code while testing performance
+            return code;
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error parsing code", e);
             return code;
@@ -74,11 +53,13 @@ public class SyntaxParser {
             return;
         }
 
+        this.formattedCode = formattedCode;
         try {
             CharStream input = CharStreams.fromString(formattedCode);
-            lexer = new CPP14Lexer(input);
+            lexer.setInputStream(input);
+            
             CommonTokenStream tokens = new CommonTokenStream(lexer);
-            parser = new CPP14Parser(tokens);
+            parser.setTokenStream(tokens);
             
             ParseTree tree = parser.translationUnit();
             if (tree == null) {
@@ -93,6 +74,8 @@ public class SyntaxParser {
     }
 
     private class CrossReferenceVisitor extends CPP14ParserBaseVisitor<Void> {
+        private int commentLineAdjustment = 0;
+
         @Override
         public Void visitPostfixExpression(CPP14Parser.PostfixExpressionContext ctx) {
             // Only handle function calls
@@ -107,13 +90,16 @@ public class SyntaxParser {
                     calledFunction = parts[1];
                 }
 
-                // Store the function reference
+                // Calculate adjusted line number
+                int actualLine = calculateActualLineNumber(ctx.getStart().getLine());
+
+                // Store the function reference with adjusted line number
                 dbHandler.insertFunctionReference(
                     currentFunction,
                     currentClass,
                     calledFunction,
                     calledClass != null ? calledClass : "Unknown",
-                    ctx.getStart().getLine()
+                    actualLine
                 );
             }
             return visitChildren(ctx);
@@ -145,13 +131,16 @@ public class SyntaxParser {
                                 variableName.indexOf("=")).trim();
                         }
 
+                        // Use adjusted line numbers when storing references
+                        int actualLine = calculateActualLineNumber(ctx.getStart().getLine());
+                        
                         // Store the type information
                         dbHandler.insertTypeInformation(
                             variableName,
                             variableType,
                             currentFunction,
                             currentClass,
-                            ctx.getStart().getLine()
+                            actualLine
                         );
 
                         // Store initial local variable reference
@@ -159,7 +148,7 @@ public class SyntaxParser {
                             variableName,
                             currentFunction,
                             currentClass,
-                            ctx.getStart().getLine()
+                            actualLine
                         );
                     }
                 }
@@ -170,6 +159,9 @@ public class SyntaxParser {
         @Override
         public Void visitIdExpression(CPP14Parser.IdExpressionContext ctx) {
             String identifier = ctx.getText();
+            
+            // Use adjusted line numbers
+            int actualLine = calculateActualLineNumber(ctx.getStart().getLine());
             
             // Handle class references (contains ::)
             if (identifier.contains("::")) {
@@ -182,7 +174,7 @@ public class SyntaxParser {
                     currentClass,
                     null,  // No specific function
                     referencedClass,
-                    ctx.getStart().getLine()
+                    actualLine
                 );
             } 
             // Handle local variable references
@@ -193,7 +185,7 @@ public class SyntaxParser {
                         identifier,
                         currentFunction,
                         currentClass,
-                        ctx.getStart().getLine()
+                        actualLine
                     );
                 }
             }
@@ -216,145 +208,35 @@ public class SyntaxParser {
             }
             return false;
         }
-    }
 
-    /*TODO: Re-implement custom formatting visitor once fully working */
-    /*
-    private class FormattingVisitor extends CPP14ParserBaseVisitor<String> {
-        private int indentLevel = 0;
-        private boolean wasNewline = false;
-    
-        @Override
-        public String visitChildren(RuleNode node) {
-            // Add debug print for full node text
-            System.out.println("Processing full node text: '" + node.getText() + "'");
+        private int calculateActualLineNumber(int parsedLineNumber) {
+            // Count actual code lines up to the parsed line number
+            String[] lines = formattedCode.split("\n", parsedLineNumber + 1);
+            int actualLineNumber = 0;
             
-            StringBuilder result = new StringBuilder();
-            int n = node.getChildCount();
-    
-            for (int i = 0; i < n; i++) {
-                ParseTree child = node.getChild(i);
-                String childResult = child.accept(this);
-    
-                if (childResult != null) {
-                    // Debug print statement
-                    System.out.println("Processing node: '" + childResult + "'");
-                    System.out.println("Result: " + result.toString());
-
-                    if (isOpeningBrace(childResult)) {
-                        result.append(" {\n");
-                        indentLevel++;
-                        result.append(getIndentation());
-                    } else if (isClosingBrace(childResult)) {
-                        result.append("\n");
-                        indentLevel--;
-                        result.append(getIndentation()).append("}");
-                    } else if (isControlKeyword(childResult)) {
-                        result.append("\n").append(getIndentation()).append(childResult).append(" ");
-                    } else if (needsNewline(childResult)) {
-                        result.append(childResult).append("\n").append(getIndentation());
-                        wasNewline = true;
-                    } else {
-                        result.append(childResult);
-                        
-                        if (!wasNewline) {
-                            if (i < n - 1 && needsSpace(child, node.getChild(i + 1))) {
-                                result.append(" ");
-                            }
-                        } else {
-                            wasNewline = false;
+            for (int i = 0; i < Math.min(lines.length, parsedLineNumber); i++) {
+                actualLineNumber++; // Every line, including empty ones and comments, counts
+                String line = lines[i].trim();
+                
+                // For multi-line comments, add the additional lines
+                if (line.contains("/*")) {
+                    int currentLine = i;
+                    while (currentLine < lines.length && !lines[currentLine].contains("*/")) {
+                        if (currentLine != i) { // Don't double-count the first line
+                            actualLineNumber++;
+                        }
+                        currentLine++;
+                    }
+                    if (currentLine < lines.length && lines[currentLine].contains("*/")) {
+                        if (currentLine != i) { // Don't double-count if comment ends on same line
+                            actualLineNumber++;
                         }
                     }
+                    i = currentLine;
                 }
             }
-            return result.toString();
+            
+            return actualLineNumber;
         }
-    
-        @Override
-        public String visitTerminal(TerminalNode node) {
-            // Ignore EOF token
-            if (node.getSymbol().getType() == Token.EOF) {
-                return "";
-            }
-            return formatToken(node.getText());
-        }
-    
-        private boolean needsNewline(String text) {
-            return text.equals(";") || text.equals("{") || text.equals("}");
-        }
-    
-        private boolean needsSpace(ParseTree left, ParseTree right) {
-            String leftText = left.getText();
-            String rightText = right.getText();
-    
-            // Don't add space around "::" operator
-            if (leftText.equals("::") || rightText.equals("::")) {
-                return false;
-            }
-    
-            // Don't add space before/after certain punctuation
-            if (isPunctuation(leftText) || isPunctuation(rightText)) {
-                return false;
-            }
-            return true;
-        }
-    
-        private boolean isOpeningBrace(String text) {
-            return text.equals("{");
-        }
-    
-        private boolean isClosingBrace(String text) {
-            return text.equals("}");
-        }
-    
-        private boolean isControlKeyword(String text) {
-            // Special case for "else" to prevent newline before "if"
-            if (text.equals("else")) {
-                return false;
-            }
-            // Add newline before other control flow keywords
-            return text.matches("\\b(if|while|for|return|switch|do|try|catch)\\b");
-        }
-    
-        private boolean isPunctuation(String text) {
-            return text.matches("[;.,(){}\\[\\]<>]");
-        }
-    
-        private String getIndentation() {
-            return INDENT.repeat(indentLevel);
-        }
-    
-        private String formatToken(String token) {
-            // Remove <EOF> if present
-            if (token.endsWith("<EOF>")) {
-                token = token.substring(0, token.length() - 5);
-            }
-
-            // Remove spaces in pointer/reference types like "char *" -> "char*"
-            if (token.matches("[*|&];")) {
-                return token;
-            }
-
-            // Adjust spacing rules for specific tokens
-            if (token.equals("(") || token.equals("[")) return token;
-            if (token.equals(")") || token.equals("]")) return token;
-            if (token.equals("::")) return token;
-            return token.trim();
-        }
-    }*/
-
-    // private String cleanInputCode(String code) {
-    //     return code
-    //         // Replace multiple spaces with a single space
-    //         .replaceAll("\\s+", " ")
-    //         // Remove spaces around operators and punctuation
-    //         .replaceAll("\\s*([{}\\[\\]().,;:><+=\\-*/%&|^!])\\s*", "$1")
-    //         // Add single space after commas
-    //         .replaceAll(",", ", ")
-    //         // Clean up pointer/reference declarations
-    //         .replaceAll("\\s*([*&])\\s*", "$1")
-    //         // Ensure single space around keywords
-    //         .replaceAll("\\b(if|else|while|for|return|switch|do|try|catch)\\b", " $1 ")
-    //         .trim();
-    // }
+    }
 }

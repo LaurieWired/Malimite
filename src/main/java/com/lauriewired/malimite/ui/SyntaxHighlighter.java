@@ -68,8 +68,12 @@ public class SyntaxHighlighter {
             scheme.getStyle(Token.OPERATOR).foreground = Color.WHITE;
             scheme.getStyle(Token.SEPARATOR).foreground = Color.WHITE;
             scheme.getStyle(Token.IDENTIFIER).foreground = Color.decode("#9CDCFE");
+            // XML-specific colors for dark theme
+            scheme.getStyle(Token.MARKUP_TAG_DELIMITER).foreground = Color.decode("#808080");    // Gray for < > /
+            scheme.getStyle(Token.MARKUP_TAG_NAME).foreground = Color.decode("#569CD6");         // Blue for tag names
+            scheme.getStyle(Token.MARKUP_TAG_ATTRIBUTE).foreground = Color.decode("#9CDCFE");    // Light blue for attributes
+            scheme.getStyle(Token.MARKUP_TAG_ATTRIBUTE_VALUE).foreground = Color.decode("#CE9178"); // Orange for values
         } else {
-            // Light mode with additional tokens for XML styling
             Color booleanColor = Color.decode("#0451A5");
             Color keyColor = Color.decode("#4A7A4F"); // Soft green for keys
             Color valueColor = Color.decode("#376E9B"); // Soft blue for values
@@ -87,6 +91,11 @@ public class SyntaxHighlighter {
             scheme.getStyle(Token.OPERATOR).foreground = Color.decode("#333333");
             scheme.getStyle(Token.SEPARATOR).foreground = Color.decode("#333333");
             scheme.getStyle(Token.IDENTIFIER).foreground = Color.decode("#001080");
+            // XML-specific colors for light theme
+            scheme.getStyle(Token.MARKUP_TAG_DELIMITER).foreground = Color.decode("#800000");    // Dark red for < > /
+            scheme.getStyle(Token.MARKUP_TAG_NAME).foreground = Color.decode("#800000");         // Dark red for tag names
+            scheme.getStyle(Token.MARKUP_TAG_ATTRIBUTE).foreground = Color.decode("#FF0000");    // Red for attributes
+            scheme.getStyle(Token.MARKUP_TAG_ATTRIBUTE_VALUE).foreground = Color.decode("#0000FF"); // Blue for values
         }
     
         // Apply background colors

@@ -301,7 +301,7 @@ public class AnalysisWindow {
         fileContentArea.setTabSize(2);
         fileContentArea.setTabsEmulated(true);  // This makes it use spaces instead of tabs
         fileContentArea.setEditable(false);
-        fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
+        fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_CPLUSPLUS);
         fileContentArea.setCodeFoldingEnabled(true);
     
         // Add cursor and selection tracking
@@ -976,7 +976,7 @@ public class AnalysisWindow {
     
         // Check if we're in the Classes root
         if (isInClassesTree(path)) {
-            fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
+            fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_CPLUSPLUS);
             
             // If this is a class node (direct child of "Classes" node)
             if (path.getPathCount() == 3) {
@@ -1014,10 +1014,11 @@ public class AnalysisWindow {
                 byte[] contentBytes = FileProcessing.readContentFromZip(currentFilePath, entryPath);
                 String contentText;
 
+                setSyntaxStyle(entryPath);
+
                 // Check if this is a mobile provision file
                 if (entryPath.endsWith("embedded.mobileprovision")) {
                     contentText = MobileProvision.parseProvisioningProfile(contentBytes);
-                    fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
                 } else if (fullPath.toString().endsWith("plist")) {
                     if (PlistUtils.isBinaryPlist(contentBytes)) {
                         contentText = PlistUtils.decodeBinaryPropertyList(contentBytes);
@@ -1027,8 +1028,6 @@ public class AnalysisWindow {
                         fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
                     }
                 } else {
-                    // Reset to default C syntax for other files
-                    fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_C);
                     contentText = new String(contentBytes);
                 }
 
@@ -1368,7 +1367,7 @@ public class AnalysisWindow {
                ((DefaultMutableTreeNode) path.getPathComponent(1)).getUserObject().toString().equals("Classes");
     }
 
-    private static void startEditing(TreePath path) {
+    public static void startEditing(TreePath path) {
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) node.getParent();
         String functionName = node.getUserObject().toString();
@@ -1475,45 +1474,80 @@ public class AnalysisWindow {
             table.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseClicked(MouseEvent e) {
-                    int row = table.rowAtPoint(e.getPoint());
-                    if (row >= 0 && row < resourceStrings.size()) {
-                        Map<String, String> selectedString = resourceStrings.get(row);
-                        String resourcePath = selectedString.get("resourceId");
-                        String fullPath = "Files/" + resourcePath;
-                        String searchValue = selectedString.get("value").trim();
+                    if (e.getClickCount() == 2) {  // Only handle double clicks
+                        LOGGER.info("Double click detected");
                         
-                        DefaultMutableTreeNode node = findNodeByPath((DefaultMutableTreeNode) treeModel.getRoot(), fullPath);
-                        if (node != null) {
-                            TreePath path = new TreePath(node.getPath());
-
-                            // Open the file if it's not already open
-                            if (SelectFile.isFileOpen(path)) {
-                                SelectFile.handleNodeClick(path);
+                        int row = table.rowAtPoint(e.getPoint());
+                        LOGGER.info("Selected row: " + row);
+                        
+                        if (row >= 0 && row < resourceStrings.size()) {
+                            Map<String, String> selectedString = resourceStrings.get(row);
+                            String resourcePath = selectedString.get("resourceId");
+                            LOGGER.info("Resource path: " + resourcePath);
+                            
+                            // Construct the correct path by prepending "Files/" and adding "Resources/"
+                            // after the .app/ component if it's not the main Info.plist
+                            String fullPath;
+                            if (resourcePath.matches("Payload/[^/]+\\.app/Info\\.plist")) {
+                                fullPath = "Files/" + resourcePath;
                             } else {
-                                SelectFile.replaceActiveFile(path);
+                                // Find the .app/ part and insert Resources/ after it
+                                int appIndex = resourcePath.indexOf(".app/");
+                                if (appIndex != -1) {
+                                    fullPath = "Files/" + resourcePath.substring(0, appIndex + 5) + 
+                                             "Resources/" + resourcePath.substring(appIndex + 5);
+                                } else {
+                                    fullPath = "Files/" + resourcePath;
+                                }
                             }
-
-                            // After the file is opened, find and highlight the string
-                            SwingUtilities.invokeLater(() -> {
-                                String content = fileContentArea.getText();
-                                int index = content.indexOf(searchValue);
-                                if (index != -1) {
-                                    fileContentArea.setCaretPosition(index);
+                            LOGGER.info("Constructed full path: " + fullPath);
+                            
+                            // Find the node and create a TreePath
+                            DefaultMutableTreeNode node = findNodeByPath((DefaultMutableTreeNode) treeModel.getRoot(), fullPath);
+                            if (node != null) {
+                                TreePath path = new TreePath(node.getPath());
+                                SelectFile.addFile(path);  // This will handle both opening and activating the file
+                                
+                                // Find and highlight the string after a short delay
+                                String searchValue = selectedString.get("value").trim();
+                                LOGGER.info("Searching for value: " + searchValue);
+                                
+                                SwingUtilities.invokeLater(() -> {
                                     try {
-                                        // Highlight the found text
-                                        fileContentArea.setSelectionStart(index);
-                                        fileContentArea.setSelectionEnd(index + searchValue.length());
+                                        String content = fileContentArea.getText();
+                                        LOGGER.info("Content length: " + content.length());
                                         
-                                        // Ensure the found text is visible in the viewport
-                                        Rectangle rect = fileContentArea.modelToView(index);
-                                        if (rect != null) {
-                                            fileContentArea.scrollRectToVisible(rect);
+                                        int index = content.indexOf(searchValue);
+                                        LOGGER.info("Found string at index: " + index);
+                                        
+                                        if (index != -1) {
+                                            LOGGER.info("Setting caret and selection");
+                                            fileContentArea.setCaretPosition(index);
+                                            fileContentArea.setSelectionStart(index);
+                                            fileContentArea.setSelectionEnd(index + searchValue.length());
+                                            
+                                            Rectangle rect = fileContentArea.modelToView(index);
+                                            LOGGER.info("View rectangle: " + (rect != null ? rect.toString() : "null"));
+                                            
+                                            if (rect != null) {
+                                                fileContentArea.scrollRectToVisible(rect);
+                                                LOGGER.info("Scrolled to make selection visible");
+                                            }
+                                        } else {
+                                            LOGGER.warning("String not found in content");
+                                            // Log a small portion of the content for debugging
+                                            LOGGER.info("Content preview: " + 
+                                                content.substring(0, Math.min(100, content.length())) + "...");
                                         }
                                     } catch (Exception ex) {
-                                        LOGGER.warning("Error highlighting text: " + ex.getMessage());
+                                        LOGGER.log(Level.SEVERE, "Error highlighting text", ex);
                                     }
-                                }
-                            });
+                                });
+                            } else {
+                                LOGGER.warning("Could not find node for path: " + fullPath);
+                            }
+                        } else {
+                            LOGGER.warning("Invalid row selected: " + row);
                         }
                     }
                 }
@@ -1568,6 +1602,39 @@ public class AnalysisWindow {
         }
     }
 
+    public static void setSyntaxStyle(String filePath) {
+        if (filePath == null) {
+            fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_NONE);
+            return;
+        }
+
+        // Classes directory always uses C syntax
+        if (filePath.startsWith("Classes/")) {
+            fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_CPLUSPLUS);
+            return;
+        }
+
+        // Handle different file types
+        if (!filePath.endsWith(".plist")) {
+            if (filePath.endsWith("embedded.mobileprovision")) {
+                fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
+            } else if (filePath.endsWith(".json")) {
+                fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JSON);
+            } else if (filePath.endsWith(".xml")) {
+                fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
+            } else if (filePath.endsWith(".js")) {
+                fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVASCRIPT);
+            } else if (filePath.endsWith(".html") || filePath.endsWith(".htm")) {
+                fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_HTML);
+            } else if (filePath.endsWith(".css")) {
+                fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_CSS);
+            } else {
+                // Default to C syntax for unknown file types
+                fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_CPLUSPLUS);
+            }
+        }
+    }
+
     public static void showFileContent(String filePath) {
         if (filePath == null) {
             fileContentArea.setText("");
@@ -1612,6 +1679,12 @@ public class AnalysisWindow {
                 fileTree.setSelectionPath(path);
                 fileTree.scrollPathToVisible(path);
             }
+
+            setSyntaxStyle(filePath);
+            
+            // Force focus and repaint
+            fileContentArea.requestFocusInWindow();
+            fileContentArea.repaint();
         });
     }
 
@@ -1773,5 +1846,31 @@ public class AnalysisWindow {
 
     public static RSyntaxTextArea getFileContentArea() {
         return fileContentArea;
+    }
+
+    public static void navigateToLine(int lineNumber) {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                int line = lineNumber - 1; // Convert to 0-based index
+                int offset = fileContentArea.getLineStartOffset(line);
+                fileContentArea.setCaretPosition(offset);
+                
+                // Ensure the line is visible
+                Rectangle rect = fileContentArea.modelToView(offset);
+                if (rect != null) {
+                    fileContentArea.scrollRectToVisible(rect);
+                }
+                
+                // Highlight the line
+                int lineEnd = fileContentArea.getLineEndOffset(line);
+                fileContentArea.setSelectionStart(offset);
+                fileContentArea.setSelectionEnd(lineEnd - 1);
+                
+                fileContentArea.requestFocusInWindow();
+                fileContentArea.repaint();
+            } catch (Exception e) {
+                System.err.println("Error navigating to line: " + e.getMessage());
+            }
+        });
     }
 }

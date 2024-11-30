@@ -143,11 +143,19 @@ public class GhidraProject {
                     // Remove Ghidra comments before parsing
                     decompiledCode = decompiledCode.replaceAll("/\\*.*\\*/", "");  // Ghidra comments
                     
-                    // First parse and format the code
+                    // Add headers first
+                    if (!decompiledCode.trim().startsWith("// Class:") && !decompiledCode.trim().startsWith("// Function:")) {
+                        StringBuilder contentBuilder = new StringBuilder();
+                        contentBuilder.append("// Class: ").append(className).append("\n");
+                        contentBuilder.append("// Function: ").append(functionName).append("\n\n");
+                        contentBuilder.append(decompiledCode.trim());
+                        decompiledCode = contentBuilder.toString();
+                    }
+
+                    // Then parse and format the code with headers included
                     SyntaxParser parser = new SyntaxParser(null);
                     String formattedCode = parser.parseAndFormatCode(decompiledCode);
-                    //System.out.println("Formatted Code: " + formattedCode);
-
+                    
                     // Now collect cross-references from the formatted code
                     parser = new SyntaxParser(dbHandler);
                     parser.setContext(functionName, className);

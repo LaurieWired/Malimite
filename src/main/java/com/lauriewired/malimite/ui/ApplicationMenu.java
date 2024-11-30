@@ -1,6 +1,8 @@
 package com.lauriewired.malimite.ui;
 
 import javax.swing.*;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.TreePath;
 
 import com.lauriewired.malimite.utils.NodeOperations;
 import com.lauriewired.malimite.configuration.Config;
@@ -38,13 +40,26 @@ public class ApplicationMenu {
 
         addMenuItem(fileMenu, "Preferences...", e -> {
             SwingUtilities.invokeLater(() -> PreferencesDialog.show(parentFrame, config));
-        }, KeyStroke.getKeyStroke(KeyEvent.VK_COMMA, KeyEvent.CTRL_DOWN_MASK));        
-
-        fileMenu.addSeparator();
+        }, KeyStroke.getKeyStroke(KeyEvent.VK_COMMA, KeyEvent.CTRL_DOWN_MASK));
 
         addMenuItem(fileMenu, "Close Window", e -> {
             parentFrame.dispose();
         }, KeyStroke.getKeyStroke(KeyEvent.VK_W, KeyEvent.CTRL_DOWN_MASK));
+
+        fileMenu.addSeparator();
+
+        addMenuItem(fileMenu, "Edit Function", e -> {
+            TreePath path = fileTree.getSelectionPath();
+            if (path != null && path.getPathCount() == 4 && 
+                ((DefaultMutableTreeNode)path.getPathComponent(1)).getUserObject().toString().equals("Classes")) {
+                AnalysisWindow.startEditing(path);
+            } else {
+                JOptionPane.showMessageDialog(parentFrame,
+                    "Please select a function in the Classes tree to edit.",
+                    "No Function Selected",
+                    JOptionPane.WARNING_MESSAGE);
+            }
+        }, KeyStroke.getKeyStroke(KeyEvent.VK_E, KeyEvent.CTRL_DOWN_MASK));
 
         return fileMenu;
     }
@@ -112,6 +127,12 @@ public class ApplicationMenu {
         },
             KeyStroke.getKeyStroke(KeyEvent.VK_X, KeyEvent.CTRL_DOWN_MASK)
         );
+
+        windowsMenu.addSeparator();
+
+        addMenuItem(windowsMenu, "Entrypoints", e -> {
+            EntrypointsDialog.show(parentFrame, AnalysisWindow.getDbHandler());
+        });
 
         return windowsMenu;
     }

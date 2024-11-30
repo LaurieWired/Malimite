@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.lauriewired.malimite.database.SQLiteDBHandler;
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import java.awt.Rectangle;
 
 public class ReferencesDialog {
     private static JDialog dialog;
@@ -98,6 +100,19 @@ public class ReferencesDialog {
             System.out.println("Loading function references for " + name + " in " + className);
             loadFunctionReferences(name, className);
         }
+
+        // Add mouse listener for double-click handling
+        referencesTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    int row = referencesTable.getSelectedRow();
+                    if (row != -1) {
+                        handleDoubleClick(row, isLocalVariable);
+                    }
+                }
+            }
+        });
 
         // Size and position the dialog
         dialog.pack();
@@ -194,5 +209,54 @@ public class ReferencesDialog {
             return "Unknown";
         }
         return String.format("%s::%s", className, function);
+    }
+
+    private static void handleDoubleClick(int row, boolean isLocalVariable) {
+        String targetClass;
+        String targetFunction;
+        String lineNumber;
+
+        if (isLocalVariable) {
+            // For local variables, the function column contains "class::function"
+            String functionRef = (String) tableModel.getValueAt(row, 2);
+            String[] parts = functionRef.split("::");
+            if (parts.length == 2) {
+                targetClass = parts[0];
+                targetFunction = parts[1];
+            } else {
+                return;
+            }
+            lineNumber = (String) tableModel.getValueAt(row, 3);
+        } else {
+            // For function references, use the source column instead of target
+            String sourceRef = (String) tableModel.getValueAt(row, 1);
+            String[] parts = sourceRef.split("::");
+            if (parts.length == 2) {
+                targetClass = parts[0];
+                targetFunction = parts[1];
+            } else {
+                return;
+            }
+            lineNumber = (String) tableModel.getValueAt(row, 3);
+        }
+
+        // Navigate to the file and line
+        SwingUtilities.invokeLater(() -> {
+            // Build the path for the file (Classes/className/functionName)
+            String filePath = String.format("Classes/%s/%s", targetClass, targetFunction);
+            
+            // Show the file content
+            AnalysisWindow.showFileContent(filePath);
+            
+            // Navigate to line after content is loaded
+            if (lineNumber != null) {
+                try {
+                    int line = Integer.parseInt(lineNumber);
+                    AnalysisWindow.navigateToLine(line);
+                } catch (NumberFormatException e) {
+                    System.err.println("Invalid line number: " + lineNumber);
+                }
+            }
+        });
     }
 } 
