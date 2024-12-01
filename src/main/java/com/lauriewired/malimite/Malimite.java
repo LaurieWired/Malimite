@@ -37,7 +37,7 @@ public class Malimite {
         // Enable macOS-specific properties if on Mac
         if (config.isMac()) {
             System.setProperty("apple.laf.useScreenMenuBar", "true");
-            //System.setProperty("apple.awt.application.appearance", "system");
+            System.setProperty("apple.awt.application.appearance", "system");
         }
         
         // Set initial FlatLaf theme based on config
@@ -46,6 +46,8 @@ public class Malimite {
         } else {
             FlatLightLaf.setup();
         }
+
+        FlatLaf.setUseNativeWindowDecorations(true);
     
         SwingUtilities.invokeLater(() -> createAndShowGUI(config));
     }

@@ -84,6 +84,19 @@ public class ApplicationMenu {
             viewMenu.addSeparator();
         }
 
+        JCheckBoxMenuItem lineWrapItem = new JCheckBoxMenuItem("Line Wrap");
+        lineWrapItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, KeyEvent.ALT_DOWN_MASK));
+        lineWrapItem.addActionListener(e -> {
+            RSyntaxTextArea textArea = AnalysisWindow.getFileContentArea();
+            if (textArea != null) {
+                textArea.setLineWrap(!textArea.getLineWrap());
+                textArea.setWrapStyleWord(textArea.getLineWrap());
+            }
+        });
+        viewMenu.add(lineWrapItem);
+
+        viewMenu.addSeparator();
+
         addMenuItem(viewMenu, "Zoom In", e -> 
             AnalysisWindow.zoomIn(),
             KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.CTRL_DOWN_MASK)
