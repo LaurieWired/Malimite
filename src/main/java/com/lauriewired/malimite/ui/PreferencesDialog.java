@@ -4,6 +4,7 @@ import javax.swing.*;
 import java.awt.*;
 import com.lauriewired.malimite.configuration.Config;
 import com.lauriewired.malimite.Malimite;
+import com.lauriewired.malimite.util.GhidraSetup;
 
 public class PreferencesDialog {
     private static JDialog dialog;
@@ -40,6 +41,13 @@ public class PreferencesDialog {
         ghidraPanel.add(new JLabel("Ghidra Path:"));
         JTextField ghidraPathField = new JTextField(config.getGhidraPath(), 30);
         JButton browseButton = new JButton("Browse");
+        
+        // Add help icon with tooltip
+        JButton helpButton = new JButton("?");
+        helpButton.setPreferredSize(new Dimension(20, 20));
+        helpButton.setToolTipText("Path to root directory of Ghidra installation");
+        helpButton.setFocusPainted(false);
+        
         browseButton.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -49,6 +57,7 @@ public class PreferencesDialog {
         });
         ghidraPanel.add(ghidraPathField);
         ghidraPanel.add(browseButton);
+        ghidraPanel.add(helpButton);  // Add the help button
         mainPanel.add(ghidraPanel);
 
         // Add some vertical spacing
@@ -79,10 +88,25 @@ public class PreferencesDialog {
         saveButton.addActionListener(e -> {
             String newTheme = (String) themeComboBox.getSelectedItem();
             String currentTheme = config.getTheme();
+            String newGhidraPath = ghidraPathField.getText();
+            String currentGhidraPath = config.getGhidraPath();
+            
+            // Check if Ghidra path has changed
+            if (!newGhidraPath.equals(currentGhidraPath)) {
+                int response = JOptionPane.showConfirmDialog(dialog,
+                    "Ghidra path updated. Downloading JSON dependency to Ghidra directory.\nNote: This will not affect Ghidra",
+                    "Setup Required Libraries",
+                    JOptionPane.OK_CANCEL_OPTION,
+                    JOptionPane.INFORMATION_MESSAGE);
+                
+                if (response == JOptionPane.OK_OPTION) {
+                    GhidraSetup.setupGhidraLibs(newGhidraPath);
+                }
+            }
             
             // Save all preferences
             config.setTheme(newTheme);
-            config.setGhidraPath(ghidraPathField.getText());
+            config.setGhidraPath(newGhidraPath);
             config.setOpenAIApiKey(new String(openaiKeyField.getPassword()));
             config.setClaudeApiKey(new String(claudeKeyField.getPassword()));
             config.saveConfig();

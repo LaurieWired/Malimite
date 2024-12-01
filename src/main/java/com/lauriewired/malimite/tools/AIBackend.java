@@ -4,6 +4,8 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
 import com.lauriewired.malimite.configuration.Config;
 import com.lauriewired.malimite.ui.AnalysisWindow;
@@ -72,6 +74,8 @@ public class AIBackend {
             super(message);
         }
     }
+
+    private static final Logger LOGGER = Logger.getLogger(AIBackend.class.getName());
 
     public static String sendToModel(String provider, String modelId, String inputText, Config config) throws IOException, ApiKeyMissingException {
         switch (provider.toLowerCase()) {
@@ -164,7 +168,7 @@ public class AIBackend {
                 return content;
             }
         } catch (JSONException e) {
-            System.err.println("Error parsing OpenAI response: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error parsing OpenAI response", e);
         }
         return jsonResponse; // Return original response if parsing fails
     }

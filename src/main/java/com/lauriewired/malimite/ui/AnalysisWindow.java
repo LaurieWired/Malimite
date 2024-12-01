@@ -1404,8 +1404,6 @@ public class AnalysisWindow {
 
                     // Update database and verify
                     dbHandler.updateFunctionDecompilation(functionName, className, newCode);
-                    System.out.println("Updated function: " + functionName);
-                    System.out.println("Class: " + className);
                     String verifyUpdate = dbHandler.getFunctionDecompilation(functionName, className);
                     if (verifyUpdate != null && verifyUpdate.equals(newCode)) {
                         anyUpdates = true;
@@ -1453,8 +1451,6 @@ public class AnalysisWindow {
 
         // Update the database
         dbHandler.updateFunctionDecompilation(functionName, className, newCode);
-        System.out.println("Updated function: " + functionName);
-        System.out.println("Class: " + className);
 
         // Reset editing state
         fileContentArea.setEditable(false);

@@ -8,6 +8,7 @@ import com.lauriewired.malimite.ui.AnalysisWindow;
 import com.lauriewired.malimite.ui.SyntaxHighlighter;
 import com.lauriewired.malimite.ui.SafeMenuAction;
 import com.lauriewired.malimite.ui.ApplicationMenu;
+import com.lauriewired.malimite.ui.PreferencesDialog;
 import com.lauriewired.malimite.utils.FileProcessing;
 
 import javax.swing.*;
@@ -265,6 +266,21 @@ public class Malimite {
 
     private static void setupAnalyzeButtonListener(JButton analyzeButton, JTextField filePathText, Config config) {
         analyzeButton.addActionListener(e -> {
+            // First check if Ghidra path is set
+            if (config.getGhidraPath() == null || config.getGhidraPath().trim().isEmpty()) {
+                int choice = JOptionPane.showConfirmDialog(null,
+                    "Ghidra path is not set. Would you like to set it in preferences?\nNote: This is required for analysis",
+                    "Ghidra Path Required",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+                    
+                if (choice == JOptionPane.YES_OPTION) {
+                    SwingUtilities.invokeLater(() -> PreferencesDialog.show((JFrame)SwingUtilities.getWindowAncestor(analyzeButton), config));
+                }
+                return;
+            }
+
+            // Proceed with existing analysis logic
             String filePath = filePathText.getText();
             if (!filePath.isEmpty() && Files.exists(Paths.get(filePath))) {
                 AnalysisWindow.show(new File(filePath), config);

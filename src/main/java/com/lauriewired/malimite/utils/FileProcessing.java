@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import com.lauriewired.malimite.files.Macho;
 import com.lauriewired.malimite.database.SQLiteDBHandler;
@@ -37,27 +38,27 @@ public class FileProcessing {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
+                    LOGGER.info(line);
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                LOGGER.log(Level.SEVERE, "Error reading stream", e);
             }
         }).start();
     }
 
     public static void unzipExecutable(String zipFilePath, String executableName, String outputFilePath) throws IOException {
-        System.out.println("Attempting to unzip executable from: " + zipFilePath);
-        System.out.println("Looking for executable: " + executableName);
-        System.out.println("Output path: " + outputFilePath);
+        LOGGER.info("Attempting to unzip executable from: " + zipFilePath);
+        LOGGER.info("Looking for executable: " + executableName);
+        LOGGER.info("Output path: " + outputFilePath);
         
         try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(zipFilePath))) {
             ZipEntry entry = zipIn.getNextEntry();
             while (entry != null) {
-                System.out.println("Examining zip entry: " + entry.getName());
+                LOGGER.info("Examining zip entry: " + entry.getName());
                 if (!entry.isDirectory() && entry.getName().endsWith(executableName)) {
-                    System.out.println("Found matching executable, extracting...");
+                    LOGGER.info("Found matching executable, extracting...");
                     extractFile(zipIn, outputFilePath);
-                    System.out.println("Successfully extracted executable to: " + outputFilePath);
+                    LOGGER.info("Successfully extracted executable to: " + outputFilePath);
                     break;
                 }
                 zipIn.closeEntry();
@@ -102,14 +103,14 @@ public class FileProcessing {
      * Returns the name of the new project directory
      */
     public static String extractMachoToProjectDirectory(String filePath, String executableName, String projectDirectoryPath) {
-        System.out.println("filePath: " + filePath + " executableName: " + executableName + " projectDirectoryPath: " + projectDirectoryPath);
+        LOGGER.info("filePath: " + filePath + " executableName: " + executableName + " projectDirectoryPath: " + projectDirectoryPath);
         if (filePath == null || filePath.isEmpty() || 
             executableName == null || executableName.isEmpty()) {
-            System.out.println("Failed to extract executable");
+            LOGGER.warning("Failed to extract executable");
             return "";
         }
 
-        System.out.println(filePath + " " + executableName);
+        LOGGER.info(filePath + " " + executableName);
 
         // Extract the base name of the .ipa file
         File ipaFile = new File(filePath);
@@ -128,7 +129,7 @@ public class FileProcessing {
         File projectDirectory = new File(projectDirectoryPath);
         if (!projectDirectory.exists()) {
             if (projectDirectory.mkdir()) {
-                System.out.println("Created project directory: " + projectDirectoryPath);
+                LOGGER.info("Created project directory: " + projectDirectoryPath);
                 
                 // Create and save initial project configuration
                 Project project = new Project();
@@ -144,17 +145,17 @@ public class FileProcessing {
                 try {
                     unzipExecutable(filePath, executableName, outputFilePath);
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    LOGGER.log(Level.SEVERE, "Error unzipping executable", e);
                 }
             } else {
-                System.out.println("Failed to create project directory: " + projectDirectoryPath);
+                LOGGER.warning("Failed to create project directory: " + projectDirectoryPath);
                 return;
             }
         } else {
             // Load existing project configuration
             Project project = loadProjectConfig(projectDirectoryPath);
             if (project != null) {
-                System.out.println("Loaded existing project: " + project.getFileName());
+                LOGGER.info("Loaded existing project: " + project.getFileName());
             }
         }
     }
@@ -172,9 +173,9 @@ public class FileProcessing {
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             String json = gson.toJson(project);
             Files.writeString(configFile.toPath(), json);
-            System.out.println("Successfully saved project config");
+            LOGGER.info("Successfully saved project config");
         } catch (IOException e) {
-            System.err.println("Failed to save project configuration: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "Failed to save project configuration", e);
         }
     }
 
@@ -219,15 +220,15 @@ public class FileProcessing {
     private static void saveProjectsList(List<String> projects) {
         try {
             String projectsPath = getProjectsFilePath();
-            System.out.println("Saving projects list to: " + projectsPath);
-            System.out.println("Projects to save: " + String.join(", ", projects));
+            LOGGER.info("Saving projects list to: " + projectsPath);
+            LOGGER.info("Projects to save: " + String.join(", ", projects));
             
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             String json = gson.toJson(projects);
             Files.writeString(Paths.get(projectsPath), json);
-            System.out.println("Successfully saved projects list");
+            LOGGER.info("Successfully saved projects list");
         } catch (IOException e) {
-            System.err.println("Failed to save projects list: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "Failed to save projects list", e);
         }
     }
 

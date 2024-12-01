@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -23,6 +25,7 @@ import com.lauriewired.malimite.decompile.SyntaxParser;
 
 public class SQLiteDBHandler { 
     private String url;
+    private static final Logger LOGGER = Logger.getLogger(SQLiteDBHandler.class.getName());
 
     /*
      *  SQLiteDBHandler dbHandler = new SQLiteDBHandler("mydatabase.db");
@@ -100,7 +103,7 @@ public class SQLiteDBHandler {
             stmt.execute(sqlLocalVariableReferences);
             stmt.execute(sqlTypeInformation);
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Database initialization error", e);
         }
     }
 
@@ -119,7 +122,7 @@ public class SQLiteDBHandler {
                 classFunctionMap.put(className, functions);
             }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error getting all classes and functions", e);
         }
         return classFunctionMap;
     }
@@ -178,7 +181,7 @@ public class SQLiteDBHandler {
             pstmt.setString(4, decompiledCode);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error inserting function", e);
         }
     }
 
@@ -192,7 +195,7 @@ public class SQLiteDBHandler {
             pstmt.setInt(3, decompilationLine);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error inserting function", e);
         }
     }
 
@@ -229,7 +232,7 @@ public class SQLiteDBHandler {
             pstmt.setString(2, functions);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error inserting class", e);
         }
     }
 
@@ -244,7 +247,7 @@ public class SQLiteDBHandler {
             pstmt.setString(4, decompilationCode);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error inserting class", e);
         }
     }
 
@@ -261,7 +264,7 @@ public class SQLiteDBHandler {
                                    rs.getString("Functions"));
             }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error getting classes", e);
         }
     }
 
@@ -296,9 +299,9 @@ public class SQLiteDBHandler {
             parser.setContext(functionName, className);
             parser.collectCrossReferences(decompiledCode);
             
-            System.out.println("Database update for " + functionName + " affected " + rowsAffected + " rows");
+            LOGGER.info("Database update for " + functionName + " affected " + rowsAffected + " rows");
         } catch (SQLException e) {
-            System.err.println("Error updating function decompilation: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error updating function decompilation", e);
             e.printStackTrace();
         }
     }
@@ -335,7 +338,7 @@ public class SQLiteDBHandler {
                 pstmt.executeUpdate();
             }
         } catch (SQLException e) {
-            System.err.println("Error clearing function references: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error clearing function references", e);
             e.printStackTrace();
         }
     }
@@ -354,7 +357,7 @@ public class SQLiteDBHandler {
                 }
             }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error getting function decompilation", e);
         }
         return null;
     }
@@ -370,7 +373,7 @@ public class SQLiteDBHandler {
             pstmt.setString(4, label);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error inserting Mach-O string", e);
         }
     }
 
@@ -391,7 +394,7 @@ public class SQLiteDBHandler {
                 strings.add(string);
             }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error getting Mach-O strings", e);
         }
         return strings;
     }
@@ -406,7 +409,7 @@ public class SQLiteDBHandler {
             pstmt.setString(3, type);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error inserting resource string", e);
         }
     }
 
@@ -426,7 +429,7 @@ public class SQLiteDBHandler {
                 strings.add(string);
             }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error getting resource strings", e);
         }
         return strings;
     }
@@ -457,7 +460,7 @@ public class SQLiteDBHandler {
             pstmt.setInt(10, lineNumber);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error inserting function reference", e);
         }
     }
 
@@ -484,7 +487,7 @@ public class SQLiteDBHandler {
             pstmt.setInt(8, lineNumber);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error inserting local variable reference", e);
         }
     }
 
@@ -513,7 +516,7 @@ public class SQLiteDBHandler {
                 }
             }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error getting function cross references", e);
         }
         return references;
     }
@@ -537,7 +540,7 @@ public class SQLiteDBHandler {
                 }
             }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error getting type information", e);
         }
         return types;
     }
@@ -556,7 +559,7 @@ public class SQLiteDBHandler {
             pstmt.setInt(5, lineNumber);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error inserting type information", e);
         }
     }
 
@@ -583,6 +586,7 @@ public class SQLiteDBHandler {
                 }
             }
         } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Error getting local variable references", e);
             e.printStackTrace();
         }
         return references;
@@ -599,7 +603,7 @@ public class SQLiteDBHandler {
                 return rs.next();
             }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error checking function name", e);
             return false;
         }
     }
