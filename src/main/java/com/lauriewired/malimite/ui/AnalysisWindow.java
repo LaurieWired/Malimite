@@ -697,30 +697,63 @@ public class AnalysisWindow {
     private static void unzipAndLoadToTree(File fileToUnzip, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
         LOGGER.info("Analyzing " + fileToUnzip);
         currentFilePath = fileToUnzip.toString();
-    
+
         try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(fileToUnzip))) {
             ZipEntry entry = zipIn.getNextEntry();
             DefaultMutableTreeNode appNode = null;
-        
-            // Populate the files section
+            
+            // First pass: Find and process Info.plist to initialize infoPlist object
             while (entry != null) {
-                if (entry.getName().endsWith(".app/")) {
-                    appNode = new DefaultMutableTreeNode(entry.getName());
-                    filesRootNode.add(appNode);
-                } else if (appNode != null && entry.getName().startsWith(appNode.toString())) {
-                    handleEntryWithoutResources(entry, appNode, zipIn);
+                if (entry.getName().endsWith(".app/Info.plist")) {
+                    
+                    DefaultMutableTreeNode infoNode = new DefaultMutableTreeNode("Info.plist");
+                    filesRootNode.add(infoNode);
+                    String nodePath = NodeOperations.buildFullPathFromNode(infoNode);
+                    fileEntriesMap.put(nodePath, entry.getName());
+                    infoPlist = new InfoPlist(infoNode, currentFilePath, fileEntriesMap);
+                    updateBundleIdDisplay(infoPlist.getBundleIdentifier());
+                    
+                    // Remove Info.plist from fileEntriesMap so it can be processed separately later
+                    fileEntriesMap.remove(nodePath); // Not ideal for perf since we process it twice but will optimize later
+                    filesRootNode.remove(infoNode);
+                    break;
                 }
                 zipIn.closeEntry();
                 entry = zipIn.getNextEntry();
             }
+            
+            // Reset stream for second pass
+            zipIn.close();
+            try (ZipInputStream zipIn2 = new ZipInputStream(new FileInputStream(fileToUnzip))) {
+                entry = zipIn2.getNextEntry();
+                
+                // Second pass: Process all other files
+                while (entry != null) {
+                    if (entry.getName().endsWith(".app/")) {
+                        appNode = new DefaultMutableTreeNode(entry.getName());
+                        filesRootNode.add(appNode);
+                    } else if (appNode != null && entry.getName().startsWith(appNode.toString())) {
+                        handleEntryWithoutResources(entry, appNode, zipIn2);
+                    }
+                    zipIn2.closeEntry();
+                    entry = zipIn2.getNextEntry();
+                }
+            }
+            
             LOGGER.info("Finished extracting resources");
 
-            initializeProject();
-            populateClassesNode(classesRootNode);
-            
-            // Now process all resources in a separate pass
-            processResourceStrings(fileToUnzip, appNode);
-    
+            // Only initialize project if we have a valid Info.plist
+            if (infoPlist != null) {
+                initializeProject();
+                populateClassesNode(classesRootNode);
+                
+                // Now process all resources in a separate pass
+                processResourceStrings(fileToUnzip, appNode);
+            } else {
+                LOGGER.severe("Could not find or process Info.plist file");
+                throw new IOException("Info.plist file not found or could not be processed");
+            }
+
             treeModel.reload();
             NodeOperations.collapseAllTreeNodes(fileTree);
         } catch (IOException e) {
@@ -806,6 +839,39 @@ public class AnalysisWindow {
 
                 File dbFile = new File(dbFilePath);
                 if (!dbFile.exists()) {
+                    if (projectMacho.isUniversalBinary()) {
+                        LOGGER.info("Detected universal binary - preparing to handle architecture selection");
+                        final String[] selectedArch = new String[1];
+                        
+                        // Don't hide the processing dialog, just show arch selection on top
+                        SwingUtilities.invokeAndWait(() -> {
+                            LOGGER.info("Showing architecture selection dialog");
+                            List<String> architectures = projectMacho.getArchitectureStrings();
+                            LOGGER.info("Available architectures: " + String.join(", ", architectures));
+                            selectedArch[0] = selectArchitecture(architectures);
+                            LOGGER.info("Selected architecture: " + selectedArch[0]);
+                        });
+
+                        // Process the selected architecture if one was chosen
+                        if (selectedArch[0] != null) {
+                            LOGGER.info("Beginning processing of " + selectedArch[0] + " architecture");
+                            publish("Processing " + selectedArch[0] + " architecture...");
+                            try {
+                                projectMacho.processUniversalMacho(selectedArch[0]);
+                                LOGGER.info("Finished processing " + selectedArch[0] + " architecture");
+                            } catch (Exception e) {
+                                LOGGER.severe("Error processing universal Mach-O: " + e.getMessage());
+                                e.printStackTrace();
+                                throw e;
+                            }
+                        } else {
+                            LOGGER.warning("No architecture selected - cannot proceed");
+                            throw new IllegalStateException("No architecture selected for universal binary");
+                        }
+                    }
+                    projectMacho.printArchitectures();
+                    publish("Processing and decompiling...");
+
                     publish("Creating new database...");
                     dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
                         projectMacho.getMachoExecutableName() + "_malimite.db");
@@ -819,18 +885,6 @@ public class AnalysisWindow {
                             consoleOutput.setCaretPosition(consoleOutput.getDocument().getLength());
                         }));
                 
-                    if (projectMacho.isUniversalBinary()) {
-                        processingDialog.setVisible(false);  // Hide dialog for architecture selection
-                        List<String> architectures = projectMacho.getArchitectureStrings();
-                        String selectedArchitecture = selectArchitecture(architectures);
-                        processingDialog.setVisible(true);  // Show dialog again
-                        if (selectedArchitecture != null) {
-                            publish("Processing " + selectedArchitecture + " architecture...");
-                            projectMacho.processUniversalMacho(selectedArchitecture);
-                        }
-                    }
-                    projectMacho.printArchitectures();
-                    publish("Processing and decompiling...");
                     ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, projectMacho);
                 } else {
                     publish("Loading existing database...");
@@ -846,11 +900,16 @@ public class AnalysisWindow {
             
             @Override
             protected void process(List<String> chunks) {
-                if (!chunks.isEmpty()) {
-                    String message = chunks.get(chunks.size() - 1);
-                    statusLabel.setText(message);
-                    consoleOutput.append(message + "\n");
-                    consoleOutput.setCaretPosition(consoleOutput.getDocument().getLength());
+                for (String message : chunks) {
+                    if (message.equals("HIDE_DIALOG")) {
+                        processingDialog.setVisible(false);
+                    } else if (message.equals("SHOW_DIALOG")) {
+                        processingDialog.setVisible(true);
+                    } else {
+                        statusLabel.setText(message);
+                        consoleOutput.append(message + "\n");
+                        consoleOutput.setCaretPosition(consoleOutput.getDocument().getLength());
+                    }
                 }
             }
             
@@ -859,8 +918,10 @@ public class AnalysisWindow {
                 processingDialog.dispose();
                 try {
                     get();
-                    if (analysisFrame != null) {
-                        SwingUtilities.invokeLater(() -> {
+                    // Show the analysis window after processing is complete
+                    SwingUtilities.invokeLater(() -> {
+                        if (analysisFrame != null) {
+                            analysisFrame.setVisible(true);
                             analysisFrame.toFront();
                             analysisFrame.requestFocus();
                             if (analysisFrame.getExtendedState() == Frame.ICONIFIED) {
@@ -868,8 +929,8 @@ public class AnalysisWindow {
                             }
                             analysisFrame.setAlwaysOnTop(true);
                             analysisFrame.setAlwaysOnTop(false);
-                        });
-                    }
+                        }
+                    });
                 } catch (Exception e) {
                     LOGGER.log(Level.SEVERE, "Error during project initialization", e);
                     JOptionPane.showMessageDialog(analysisFrame,

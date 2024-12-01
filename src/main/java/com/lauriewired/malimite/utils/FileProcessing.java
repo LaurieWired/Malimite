@@ -102,6 +102,7 @@ public class FileProcessing {
      * Returns the name of the new project directory
      */
     public static String extractMachoToProjectDirectory(String filePath, String executableName, String projectDirectoryPath) {
+        System.out.println("filePath: " + filePath + " executableName: " + executableName + " projectDirectoryPath: " + projectDirectoryPath);
         if (filePath == null || filePath.isEmpty() || 
             executableName == null || executableName.isEmpty()) {
             System.out.println("Failed to extract executable");

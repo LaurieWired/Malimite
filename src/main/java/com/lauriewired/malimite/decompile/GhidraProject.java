@@ -44,7 +44,7 @@ public class GhidraProject {
     public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho) {
         LOGGER.info("Starting Ghidra decompilation for: " + executableFilePath);
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-            serverSocket.setSoTimeout(300000); // 5 minute timeout
+            serverSocket.setSoTimeout(300000); // 5 minute timeout for initial connection
 
             String analyzeHeadless = getAnalyzeHeadlessPath();
             
@@ -87,6 +87,7 @@ public class GhidraProject {
             LOGGER.info("Waiting for Ghidra script connection on port " + PORT);
             
             Socket socket = serverSocket.accept();
+            socket.setSoTimeout(0);
             LOGGER.info("Connection established with Ghidra script");
 
             try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
@@ -97,9 +98,6 @@ public class GhidraProject {
                 }
                 LOGGER.info("Ghidra script confirmed connection, beginning analysis");
 
-                // Reset socket timeout to unlimited for the actual analysis
-                socket.setSoTimeout(0);
-                
                 LOGGER.info("Reading class data from Ghidra script");
                 String line;
                 StringBuilder classDataBuilder = new StringBuilder();
@@ -161,9 +159,18 @@ public class GhidraProject {
                     parser.setContext(functionName, className);
                     parser.collectCrossReferences(formattedCode);
 
-                    // Store the formatted code
-                    LOGGER.info("Updating function: " + functionName + " in class: " + className + " with formatted code");
+                    // Store the formatted code and notify console
+                    String updateMessage = "Updating function: " + functionName + " in class: " + className + " with formatted code";
+                    LOGGER.info(updateMessage);
+                    if (consoleOutputCallback != null) {
+                        consoleOutputCallback.accept(updateMessage);
+                    }
                     dbHandler.updateFunctionDecompilation(functionName, className, formattedCode);
+                    
+                    // Add database update confirmation to console
+                    if (consoleOutputCallback != null) {
+                        consoleOutputCallback.accept("Database update for " + functionName + " affected 1 rows");
+                    }
                 }
 
                 // Add this new section to process strings

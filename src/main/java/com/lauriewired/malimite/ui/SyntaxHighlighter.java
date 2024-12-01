@@ -9,10 +9,12 @@ import javax.swing.UIManager;
 
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.fife.ui.rtextarea.Gutter;
-
+import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rsyntaxtextarea.SyntaxScheme;
 import org.fife.ui.rsyntaxtextarea.Token;
+import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import org.fife.ui.rtextarea.SmartHighlightPainter;
 import javax.swing.text.Highlighter;
 import java.awt.event.MouseAdapter;
@@ -23,15 +25,28 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.HashMap;
+import java.util.Map;
+import com.lauriewired.malimite.tools.RuntimeMethodHandler;
+import org.fife.ui.rsyntaxtextarea.Style;
 
 public class SyntaxHighlighter {
 
     private static final Logger LOGGER = Logger.getLogger(SyntaxHighlighter.class.getName());
-    private static final Color HIGHLIGHT_COLOR = new Color(255, 255, 0, 70);
-    private static final List<Object> wordHighlights = new ArrayList<>(); // Track word highlights
 
     public static void applyCustomTheme(RSyntaxTextArea textArea) {
-        // Get the current theme's background color from UIManager¬
+        // Register the custom TokenMaker for the C++ syntax style
+        TokenMakerFactory factory = TokenMakerFactory.getDefaultInstance();
+        TokenMakerFactory customFactory = new AbstractTokenMakerFactory() {
+            @Override
+            protected void initTokenMakerMap() {
+                putMapping(SyntaxConstants.SYNTAX_STYLE_CPLUSPLUS, "com.lauriewired.malimite.ui.CustomTokenMaker");
+            }
+        };
+        TokenMakerFactory.setDefaultInstance(customFactory);
+        textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_CPLUSPLUS);
+
+        // Get the current theme's background color from UIManager
         Color themeBackground = UIManager.getColor("Panel.background");
         if (themeBackground == null) {
             // Fallback if UIManager color is not available
@@ -43,6 +58,12 @@ public class SyntaxHighlighter {
         // Reset the syntax scheme to ensure clean state
         textArea.setSyntaxScheme(new SyntaxScheme(true));
         SyntaxScheme scheme = textArea.getSyntaxScheme();
+        
+        // Ensure the scheme can handle our custom token
+        if (scheme.getStyleCount() <= CustomTokenMaker.RUNTIME_METHOD) {
+            scheme.setStyle(CustomTokenMaker.RUNTIME_METHOD, 
+                          new Style(Color.BLACK));
+        }
     
         // Background colors based on the theme
         Color editorBackground = themeBackground;
@@ -137,78 +158,10 @@ public class SyntaxHighlighter {
     }
 
     public static void setupWordHighlighting(RSyntaxTextArea textArea) {
-        // Use a distinct color for word highlights
-        Color wordHighlightColor = HIGHLIGHT_COLOR;
-        Highlighter.HighlightPainter painter = new SmartHighlightPainter(wordHighlightColor);
-    
-        // Add a caret listener to dynamically highlight words at the caret
-        textArea.addCaretListener(e -> {
-            try {
-                int caretPos = textArea.getCaretPosition();
-                highlightWordAtCaret(textArea, caretPos, painter);
-            } catch (Exception ex) {
-                LOGGER.log(Level.WARNING, "Error during word highlighting", ex);
-            }
-        });
+        // Empty - we're using tokens instead of highlighting
     }
 
-    private static void highlightWordAtCaret(RSyntaxTextArea textArea, int caretPos, Highlighter.HighlightPainter painter) {
-        try {
-            // Remove only word highlights
-            Highlighter highlighter = textArea.getHighlighter();
-            for (Object highlight : wordHighlights) {
-                highlighter.removeHighlight(highlight);
-            }
-            wordHighlights.clear(); // Clear the tracking list
-
-            // Get the word at the caret or the selected text
-            String selectedText = textArea.getSelectedText();
-            if (selectedText == null || selectedText.trim().isEmpty()) {
-                selectedText = getWordAtCaret(textArea.getText(), caretPos);
-            }
-
-            if (selectedText == null || selectedText.trim().isEmpty()) {
-                return;
-            }
-
-            // Highlight all occurrences of the word
-            String text = textArea.getText();
-            String wordRegex = "\\b" + Pattern.quote(selectedText.trim()) + "\\b";
-            Pattern pattern = Pattern.compile(wordRegex);
-            Matcher matcher = pattern.matcher(text);
-
-            while (matcher.find()) {
-                Object highlight = highlighter.addHighlight(matcher.start(), matcher.end(), painter);
-                wordHighlights.add(highlight); // Track this highlight
-            }
-        } catch (Exception ex) {
-            LOGGER.log(Level.WARNING, "Error highlighting text", ex);
-        }
-    }
-
-    private static String getWordAtCaret(String text, int caretPos) {
-        if (caretPos < 0 || caretPos >= text.length()) return null;
-    
-        int start = caretPos;
-        int end = caretPos;
-    
-        // Find the start of the word
-        while (start > 0 && isWordChar(text.charAt(start - 1))) {
-            start--;
-        }
-    
-        // Find the end of the word
-        while (end < text.length() && isWordChar(text.charAt(end))) {
-            end++;
-        }
-    
-        if (start < end) {
-            return text.substring(start, end);
-        }
-        return null;
-    }
-
-    private static boolean isWordChar(char c) {
-        return Character.isLetterOrDigit(c) || c == '_';
+    private static void highlightCustomWords(RSyntaxTextArea textArea) {
+        // Empty - we're using tokens instead of highlighting
     }
 }

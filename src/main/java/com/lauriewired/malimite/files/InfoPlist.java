@@ -18,7 +18,7 @@ public class InfoPlist {
         try {
             String infoPlistPath = NodeOperations.buildFullPathFromNode(infoPlistNode);
             byte[] plistData = FileProcessing.readContentFromZip(filePath, fileEntriesMap.get(infoPlistPath));
-    
+            
             if (PlistUtils.isBinaryPlist(plistData)) {
                 // Handle binary plist
                 NSObject plist = PropertyListParser.parse(plistData);
