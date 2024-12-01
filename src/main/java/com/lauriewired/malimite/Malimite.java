@@ -38,6 +38,7 @@ public class Malimite {
         if (config.isMac()) {
             System.setProperty("apple.laf.useScreenMenuBar", "true");
             System.setProperty("apple.awt.application.appearance", "system");
+            System.setProperty("apple.awt.application.name", "Malimite");
         }
         
         // Set initial FlatLaf theme based on config
@@ -55,6 +56,20 @@ public class Malimite {
     private static void createAndShowGUI(Config config) {
         SafeMenuAction.execute(() -> {
             JFrame frame = new JFrame("Malimite");
+            
+            // Add application icon
+            try {
+                ImageIcon icon = new ImageIcon(Malimite.class.getResource("/icons/app-icon.png"));
+                frame.setIconImage(icon.getImage());
+                
+                // For macOS dock icon
+                if (config.isMac()) {
+                    Taskbar.getTaskbar().setIconImage(icon.getImage());
+                }
+            } catch (Exception e) {
+                LOGGER.warning("Could not load application icon: " + e.getMessage());
+            }
+            
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setSize(600, 400);
             frame.setLocationRelativeTo(null);
