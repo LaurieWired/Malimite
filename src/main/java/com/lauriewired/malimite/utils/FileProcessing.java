@@ -27,11 +27,11 @@ import com.lauriewired.malimite.database.SQLiteDBHandler;
 import com.lauriewired.malimite.configuration.Project;
 import javax.swing.*;
 import java.util.Map;
+import com.lauriewired.malimite.configuration.Config;
 
 public class FileProcessing {
-    private static String configDirectory = ".";
-    private static final String PROJECTS_FILENAME = "malimite.projects";
     private static final Logger LOGGER = Logger.getLogger(FileProcessing.class.getName());
+    private static Config config;
 
     public static void readStream(InputStream stream) {
         new Thread(() -> {
@@ -123,8 +123,6 @@ public class FileProcessing {
      * Otherwise, reopens an existing project
      */
     public static void openProject(String filePath, String projectDirectoryPath, String executableName, String configDir) {
-        setConfigDirectory(configDir);  // Set the config directory before any operations
-        
         // Create malimite project directory
         File projectDirectory = new File(projectDirectoryPath);
         if (!projectDirectory.exists()) {
@@ -137,6 +135,7 @@ public class FileProcessing {
                 project.setFilePath(filePath);
                 project.setFileSize(new File(filePath).length());
                 
+                // Save the project configuration to project.json
                 saveProjectConfig(projectDirectoryPath, project);
                 addProjectToList(filePath);
 
@@ -160,25 +159,6 @@ public class FileProcessing {
         }
     }
 
-    private static void saveProjectConfig(String projectDirectoryPath, Project project) {
-        try {
-            File configFile = new File(projectDirectoryPath + File.separator + "project.json");
-            // Create parent directories if they don't exist
-            configFile.getParentFile().mkdirs();
-            // Create the file if it doesn't exist
-            if (!configFile.exists()) {
-                configFile.createNewFile();
-            }
-            
-            Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            String json = gson.toJson(project);
-            Files.writeString(configFile.toPath(), json);
-            LOGGER.info("Successfully saved project config");
-        } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Failed to save project configuration", e);
-        }
-    }
-
     private static Project loadProjectConfig(String projectDirectoryPath) {
         try {
             String configPath = projectDirectoryPath + File.separator + "project.json";
@@ -192,59 +172,12 @@ public class FileProcessing {
     }
 
     private static void addProjectToList(String projectPath) {
-        List<String> projects = loadProjectsList();
-        if (!projects.contains(projectPath)) {
-            projects.add(projectPath);
-            saveProjectsList(projects);
-        }
+        config.addProjectPath(projectPath);
     }
 
-    private static List<String> loadProjectsList() {
-        try {
-            File projectsFile = new File(getProjectsFilePath());
-            // Ensure the directory exists
-            projectsFile.getParentFile().mkdirs();
-            
-            if (projectsFile.exists()) {
-                String json = Files.readString(Paths.get(getProjectsFilePath()));
-                Gson gson = new Gson();
-                Type listType = new TypeToken<ArrayList<String>>(){}.getType();
-                return gson.fromJson(json, listType);
-            }
-        } catch (IOException e) {
-            System.err.println("Failed to load projects list: " + e.getMessage());
-        }
-        return new ArrayList<>();
-    }
-
-    private static void saveProjectsList(List<String> projects) {
-        try {
-            String projectsPath = getProjectsFilePath();
-            LOGGER.info("Saving projects list to: " + projectsPath);
-            LOGGER.info("Projects to save: " + String.join(", ", projects));
-            
-            Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            String json = gson.toJson(projects);
-            Files.writeString(Paths.get(projectsPath), json);
-            LOGGER.info("Successfully saved projects list");
-        } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Failed to save projects list", e);
-        }
-    }
-
-    // Add this utility method to get all known project paths
-    public static List<String> getProjectPaths() {
-        return loadProjectsList();
-    }
-
-    // Add this method to set the config directory
-    public static void setConfigDirectory(String directory) {
-        configDirectory = directory;
-    }
-
-    // Update to use configDirectory
-    private static String getProjectsFilePath() {
-        return configDirectory + File.separator + PROJECTS_FILENAME;
+    // Add this method to set the config
+    public static void setConfig(Config configuration) {
+        config = configuration;
     }
 
     public static Project updateFileInfo(File file, Macho macho) {
@@ -293,6 +226,21 @@ public class FileProcessing {
             JCheckBox selectAllBox = (JCheckBox) ((JPanel) functionAssistPanel
                 .getComponent(1)).getComponent(0);
             selectAllBox.setSelected(false);
+        }
+    }
+
+    private static void saveProjectConfig(String projectDirectoryPath, Project project) {
+        try {
+            File configFile = new File(projectDirectoryPath + File.separator + "project.json");
+            // Create parent directories if they don't exist
+            configFile.getParentFile().mkdirs();
+            
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            String json = gson.toJson(project);
+            Files.writeString(configFile.toPath(), json);
+            LOGGER.info("Successfully saved project config to: " + configFile.getAbsolutePath());
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Failed to save project configuration", e);
         }
     }
 }

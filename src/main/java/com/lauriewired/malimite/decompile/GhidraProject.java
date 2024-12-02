@@ -2,6 +2,7 @@ package com.lauriewired.malimite.decompile;
 
 import com.lauriewired.malimite.files.Macho;
 import com.lauriewired.malimite.configuration.Config;
+import com.lauriewired.malimite.configuration.LibraryDefinitions;
 import com.lauriewired.malimite.database.SQLiteDBHandler;
 
 import java.nio.file.Paths;
@@ -18,6 +19,7 @@ import java.util.logging.Level;
 import java.util.function.Consumer;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 public class GhidraProject {
     private static final Logger LOGGER = Logger.getLogger(GhidraProject.class.getName());
@@ -122,8 +124,12 @@ public class GhidraProject {
                 JSONArray functionData = new JSONArray(functionDataBuilder.toString());
                 LOGGER.info("Processing " + classData.length() + " classes and " + functionData.length() + " functions from Ghidra analysis");
                 
+                // Get active libraries from config
+                List<String> activeLibraries = LibraryDefinitions.getActiveLibraries(config);
+                
                 // Process both class and function data together
                 Map<String, JSONArray> classToFunctions = new HashMap<>();
+                Map<String, String> classNameMapping = new HashMap<>();
 
                 // First pass: organize functions by class and demangle class names
                 for (int i = 0; i < functionData.length(); i++) {
@@ -137,7 +143,6 @@ public class GhidraProject {
                         DemangleSwift.DemangledName demangledName = DemangleSwift.demangleSwiftName(functionName);
                         if (demangledName != null) {
                             LOGGER.info("Demangled function name from " + functionName + " to " + demangledName.fullMethodName);
-                            // Use the class name from the demangled function name
                             className = demangledName.className;
                             functionName = demangledName.fullMethodName;
                             LOGGER.info("Using class name from demangled function: " + className);
@@ -151,28 +156,57 @@ public class GhidraProject {
                         className = "Global";
                     }
                     
-                    // Add function to class's function list
-                    classToFunctions.computeIfAbsent(className, k -> new JSONArray())
-                                    .put(functionName);
-                    
-                    // Process and store the decompiled code
-                    decompiledCode = decompiledCode.replaceAll("/\\*.*\\*/", "");  // Remove Ghidra comments
-                    
-                    // Add headers with the correct class name
-                    if (!decompiledCode.trim().startsWith("// Class:") && !decompiledCode.trim().startsWith("// Function:")) {
-                        StringBuilder contentBuilder = new StringBuilder();
-                        contentBuilder.append("// Class: ").append(className).append("\n");
-                        contentBuilder.append("// Function: ").append(functionName).append("\n\n");
-                        contentBuilder.append(decompiledCode.trim());
-                        decompiledCode = contentBuilder.toString();
-                    }
+                    // Check if this class should be treated as a library
+                    final String finalClassName = className;
+                    boolean isLibrary = activeLibraries.stream()
+                            .anyMatch(library -> finalClassName.startsWith(library));
 
-                    // Store function decompilation with the correct class name
-                    LOGGER.info("Storing decompilation for " + className + "::" + functionName);
-                    dbHandler.updateFunctionDecompilation(functionName, className, decompiledCode);
+                    if (!isLibrary) {
+                        // Process and store the decompiled code only for non-library classes
+                        decompiledCode = decompiledCode.replaceAll("/\\*.*\\*/", "");  // Remove Ghidra comments
+                        
+                        // Add headers with the correct class name
+                        if (!decompiledCode.trim().startsWith("// Class:") && !decompiledCode.trim().startsWith("// Function:")) {
+                            StringBuilder contentBuilder = new StringBuilder();
+                            contentBuilder.append("// Class: ").append(className).append("\n");
+                            contentBuilder.append("// Function: ").append(functionName).append("\n\n");
+                            contentBuilder.append(decompiledCode.trim());
+                            decompiledCode = contentBuilder.toString();
+                        }
+
+                        // Store function decompilation with the correct class name
+                        String message = "Storing decompilation for " + className + "::" + functionName;
+                        LOGGER.info(message);
+                        if (consoleOutputCallback != null) {
+                            consoleOutputCallback.accept(message);
+                        }
+                        dbHandler.updateFunctionDecompilation(functionName, className, decompiledCode);
+                        
+                        // Add to class functions map
+                        classToFunctions.computeIfAbsent(className, k -> new JSONArray())
+                                        .put(functionName);
+                    } else {
+                        // For library functions, combine class and function names and store under "Libraries"
+                        String libraryFunctionName = className + "::" + functionName;
+                        String message = "Storing library function: " + libraryFunctionName;
+                        LOGGER.info(message);
+                        if (consoleOutputCallback != null) {
+                            consoleOutputCallback.accept(message);
+                        }
+                        functionName = libraryFunctionName;
+                        
+                        // Store the mapping of original class name to "Libraries"
+                        classNameMapping.put(className, "Libraries");
+                        
+                        dbHandler.updateFunctionDecompilation(libraryFunctionName, "Libraries", null);
+                        
+                        // Add to class functions map under "Libraries"
+                        classToFunctions.computeIfAbsent("Libraries", k -> new JSONArray())
+                                        .put(libraryFunctionName);
+                    }
                 }
 
-                // Store class data
+                // Store class data for all classes (including libraries)
                 for (Map.Entry<String, JSONArray> entry : classToFunctions.entrySet()) {
                     String className = entry.getKey();
                     JSONArray functions = entry.getValue();

@@ -45,8 +45,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -672,6 +673,7 @@ public class AnalysisWindow {
         
         // Update this line to use FileProcessing
         Project project = FileProcessing.updateFileInfo(new File(currentFilePath), projectMacho);
+        config.addProjectPath(project.getFilePath());
         currentProject = project;  // Keep track of current project
         infoDisplay.setText(project.generateInfoString());
         
@@ -763,7 +765,46 @@ public class AnalysisWindow {
     
     private static void populateClassesNode(DefaultMutableTreeNode classesRootNode) {
         Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
-        NodeOperations.populateClassesNode(classesRootNode, classesAndFunctions);
+        
+        // Convert map keys to sorted list
+        List<String> sortedClassNames = new ArrayList<>(classesAndFunctions.keySet());
+        
+        // Remove "Libraries" from the list if it exists
+        sortedClassNames.remove("Libraries");
+        
+        // Sort remaining class names
+        Collections.sort(sortedClassNames);
+        
+        // Add "Libraries" first if it exists in the original map
+        if (classesAndFunctions.containsKey("Libraries")) {
+            DefaultMutableTreeNode librariesNode = new DefaultMutableTreeNode("Libraries");
+            List<String> libraryFunctions = classesAndFunctions.get("Libraries");
+            if (libraryFunctions != null) {
+                Collections.sort(libraryFunctions);
+                for (String function : libraryFunctions) {
+                    librariesNode.add(new DefaultMutableTreeNode(function));
+                }
+            }
+            classesRootNode.add(librariesNode);
+        }
+        
+        // Add remaining classes in sorted order
+        for (String className : sortedClassNames) {
+            DefaultMutableTreeNode classNode = new DefaultMutableTreeNode(className);
+            List<String> functions = classesAndFunctions.get(className);
+            
+            // Sort functions alphabetically if they exist
+            if (functions != null) {
+                Collections.sort(functions);
+                for (String function : functions) {
+                    classNode.add(new DefaultMutableTreeNode(function));
+                }
+            }
+            
+            classesRootNode.add(classNode);
+        }
+        
+        treeModel.reload(classesRootNode);
     }
 
     private static void initializeProject() {

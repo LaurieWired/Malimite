@@ -48,6 +48,10 @@ public class ApplicationMenu {
 
         fileMenu.addSeparator();
 
+        addMenuItem(fileMenu, "Configure Libraries", e -> {
+            SwingUtilities.invokeLater(() -> LibraryConfigDialog.show(parentFrame));
+        });
+
         addMenuItem(fileMenu, "Edit Function", e -> {
             TreePath path = fileTree.getSelectionPath();
             if (path != null && path.getPathCount() == 4 && 

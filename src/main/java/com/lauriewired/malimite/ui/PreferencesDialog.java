@@ -3,8 +3,8 @@ package com.lauriewired.malimite.ui;
 import javax.swing.*;
 import java.awt.*;
 import com.lauriewired.malimite.configuration.Config;
+import com.lauriewired.malimite.utils.GhidraSetup;
 import com.lauriewired.malimite.Malimite;
-import com.lauriewired.malimite.util.GhidraSetup;
 
 public class PreferencesDialog {
     private static JDialog dialog;

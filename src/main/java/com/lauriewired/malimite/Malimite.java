@@ -88,6 +88,8 @@ public class Malimite {
             JPanel panel = new JPanel(new BorderLayout(10, 10));
             frame.add(panel);
         
+            FileProcessing.setConfig(config);
+        
             setupComponents(panel, frame, config);
         
             frame.setVisible(true);
@@ -177,7 +179,7 @@ public class Malimite {
         projectsListPanel.setLayout(new BoxLayout(projectsListPanel, BoxLayout.Y_AXIS));
         
         // Get and add recent projects
-        List<String> projectPaths = FileProcessing.getProjectPaths();
+        List<String> projectPaths = config.getProjectPaths();
         LOGGER.info("Retrieved project paths: " + projectPaths);
         
         for (String path : projectPaths) {

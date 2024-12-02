@@ -4,6 +4,9 @@ import java.io.*;
 import java.util.Properties;
 import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 import com.lauriewired.malimite.security.KeyEncryption;
 
@@ -16,6 +19,9 @@ public class Config {
     private static final String ENCRYPTED_OPENAI_API_KEY = "openai.api.key.encrypted";
     private static final String ENCRYPTED_CLAUDE_API_KEY = "claude.api.key.encrypted";
     private static final String LOCAL_MODEL_URL = "local.model.url";
+    private static final String PROJECTS_LIST_KEY = "projects.list";
+    private static final String ADDED_LIBRARIES_KEY = "libraries.added";
+    private static final String REMOVED_LIBRARIES_KEY = "libraries.removed";
     
     private String osType;
     private String ghidraPath;
@@ -127,6 +133,79 @@ public class Config {
 
     public void setLocalModelUrl(String url) {
         properties.setProperty(LOCAL_MODEL_URL, url);
+        saveConfig();
+    }
+
+    public List<String> getProjectPaths() {
+        String projectsStr = properties.getProperty(PROJECTS_LIST_KEY, "");
+        if (projectsStr.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(Arrays.asList(projectsStr.split("\\|")));
+    }
+
+    public void addProjectPath(String path) {
+        List<String> projects = getProjectPaths();
+        if (!projects.contains(path)) {
+            projects.add(path);
+            properties.setProperty(PROJECTS_LIST_KEY, String.join("|", projects));
+            saveConfig();
+        }
+    }
+
+    public List<String> getAddedLibraries() {
+        String addedStr = properties.getProperty(ADDED_LIBRARIES_KEY, "");
+        if (addedStr.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(Arrays.asList(addedStr.split("\\|")));
+    }
+
+    public List<String> getRemovedLibraries() {
+        String removedStr = properties.getProperty(REMOVED_LIBRARIES_KEY, "");
+        if (removedStr.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(Arrays.asList(removedStr.split("\\|")));
+    }
+
+    public void addLibrary(String library) {
+        List<String> addedLibraries = getAddedLibraries();
+        List<String> removedLibraries = getRemovedLibraries();
+        
+        if (removedLibraries.contains(library)) {
+            // If it was previously removed, just remove it from the removed list
+            removedLibraries.remove(library);
+            properties.setProperty(REMOVED_LIBRARIES_KEY, String.join("|", removedLibraries));
+        } else if (!LibraryDefinitions.getDefaultLibraries().contains(library) 
+                   && !addedLibraries.contains(library)) {
+            // Only add to added list if it's not a default library and not already added
+            addedLibraries.add(library);
+            properties.setProperty(ADDED_LIBRARIES_KEY, String.join("|", addedLibraries));
+        }
+        saveConfig();
+    }
+
+    public void removeLibrary(String library) {
+        List<String> addedLibraries = getAddedLibraries();
+        List<String> removedLibraries = getRemovedLibraries();
+        
+        if (addedLibraries.contains(library)) {
+            // If it was previously added, just remove it from the added list
+            addedLibraries.remove(library);
+            properties.setProperty(ADDED_LIBRARIES_KEY, String.join("|", addedLibraries));
+        } else if (LibraryDefinitions.getDefaultLibraries().contains(library) 
+                   && !removedLibraries.contains(library)) {
+            // Only add to removed list if it's a default library and not already removed
+            removedLibraries.add(library);
+            properties.setProperty(REMOVED_LIBRARIES_KEY, String.join("|", removedLibraries));
+        }
+        saveConfig();
+    }
+
+    public void clearLibraryConfigurations() {
+        properties.remove(ADDED_LIBRARIES_KEY);
+        properties.remove(REMOVED_LIBRARIES_KEY);
         saveConfig();
     }
 }

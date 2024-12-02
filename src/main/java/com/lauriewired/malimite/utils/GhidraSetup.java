@@ -1,4 +1,4 @@
-package com.lauriewired.malimite.util;
+package com.lauriewired.malimite.utils;
 
 import javax.swing.*;
 import java.io.*;

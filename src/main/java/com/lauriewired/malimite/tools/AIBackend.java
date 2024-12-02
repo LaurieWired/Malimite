@@ -23,26 +23,31 @@ public class AIBackend {
         private final String displayName;
         private final String provider;
         private final String modelId;
+        private String customUrl;
 
         public Model(String displayName, String provider, String modelId) {
             this.displayName = displayName;
             this.provider = provider;
             this.modelId = modelId;
+            this.customUrl = null;
+        }
+
+        public Model(String displayName, String provider, String modelId, String customUrl) {
+            this(displayName, provider, modelId);
+            this.customUrl = customUrl;
         }
 
         public String getDisplayName() { return displayName; }
         public String getProvider() { return provider; }
         public String getModelId() { return modelId; }
+        public String getCustomUrl() { return customUrl; }
+        public void setCustomUrl(String url) { this.customUrl = url; }
     }
 
     private static final Model[] SUPPORTED_MODELS = {
         new Model("OpenAI GPT-4 Turbo", "openai", "gpt-4-turbo"),
-        new Model("OpenAI GPT-4 Mini", "openai", "gpt-4-mini")        
-        
-
-        // TODO: Add support for Claude and Local Model
-        //new Model("Claude", "claude", "claude-v1"),
-        //new Model("Local Model", "local", "local")
+        new Model("OpenAI GPT-4 Mini", "openai", "gpt-4-mini"),
+        new Model("Custom Model", "custom", "custom")
     };
 
     public static Model[] getSupportedModels() {
@@ -95,8 +100,16 @@ public class AIBackend {
                 }
                 return sendClaudeRequest(CLAUDE_API_URL, claudeKey, inputText, modelId);
 
-            case "local":
-                return sendLocalModelRequest(config.getLocalModelUrl(), inputText);
+            case "custom":
+                Model customModel = findCustomModel();
+                if (customModel.getCustomUrl() == null || customModel.getCustomUrl().trim().isEmpty()) {
+                    String url = showCustomUrlDialog();
+                    if (url == null || url.trim().isEmpty()) {
+                        throw new ApiKeyMissingException("Custom URL is required");
+                    }
+                    customModel.setCustomUrl(url);
+                }
+                return sendCustomModelRequest(customModel.getCustomUrl(), inputText);
 
             default:
                 throw new IllegalArgumentException("Unsupported provider: " + provider);
@@ -190,15 +203,68 @@ public class AIBackend {
         return executeRequest(conn, jsonInputString);
     }    
 
-    private static String sendLocalModelRequest(String apiUrl, String inputText) throws IOException {
+    private static String sendCustomModelRequest(String apiUrl, String inputText) throws IOException {
         URL url = new URL(apiUrl);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json");
         conn.setDoOutput(true);
 
-        String jsonInputString = "{\"input\": \"" + inputText + "\"}";
-        return executeRequest(conn, jsonInputString);
+        // Use same format as OpenAI for custom endpoints
+        String jsonInputString = String.format(
+            "{" +
+                "\"messages\": [" +
+                    "{" +
+                        "\"role\": \"user\"," +
+                        "\"content\": \"%s\"" +
+                    "}" +
+                "]" +
+            "}", inputText.replace("\"", "\\\""));
+
+        String response = executeRequest(conn, jsonInputString);
+        return parseCustomModelResponse(response);
+    }
+
+    private static String parseCustomModelResponse(String jsonResponse) {
+        try {
+            // First try OpenAI format
+            return parseOpenAIResponse(jsonResponse);
+        } catch (Exception e) {
+            // If that fails, return the raw response
+            LOGGER.log(Level.INFO, "Could not parse as OpenAI response, returning raw response", e);
+            return jsonResponse;
+        }
+    }
+
+    private static Model findCustomModel() {
+        for (Model model : SUPPORTED_MODELS) {
+            if ("custom".equals(model.getProvider())) {
+                return model;
+            }
+        }
+        throw new IllegalStateException("Custom model not found in SUPPORTED_MODELS");
+    }
+
+    private static String showCustomUrlDialog() {
+        try {
+            final String[] result = new String[1];
+            SwingUtilities.invokeAndWait(() -> {
+                String url = JOptionPane.showInputDialog(
+                    null,
+                    "Enter the URL for your custom model API:",
+                    "Custom Model Configuration",
+                    JOptionPane.PLAIN_MESSAGE
+                );
+                if (url != null && !url.trim().isEmpty() && !url.startsWith("http")) {
+                    url = "http://" + url;
+                }
+                result[0] = url;
+            });
+            return result[0];
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error showing custom URL dialog", e);
+            return null;
+        }
     }
 
     private static String executeRequest(HttpURLConnection conn, String jsonInputString) throws IOException {
