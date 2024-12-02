@@ -124,7 +124,6 @@ public class GhidraProject {
                 
                 // Process both class and function data together
                 Map<String, JSONArray> classToFunctions = new HashMap<>();
-                Map<String, String> demangledClassNames = new HashMap<>();
 
                 // First pass: organize functions by class and demangle class names
                 for (int i = 0; i < functionData.length(); i++) {
@@ -132,11 +131,6 @@ public class GhidraProject {
                     String functionName = functionObj.getString("FunctionName");
                     String className = functionObj.getString("ClassName");
                     String decompiledCode = functionObj.getString("DecompiledCode");
-                    
-                    // Replace empty class name with "Global"
-                    if (className == null || className.trim().isEmpty()) {
-                        className = "Global";
-                    }
                     
                     // For Swift binaries, get the class name from the function name
                     if (!config.isMac() && targetMacho.isSwift() && functionName.startsWith("_$s")) {
@@ -150,6 +144,11 @@ public class GhidraProject {
                         } else {
                             LOGGER.warning("Failed to demangle Swift symbol: " + functionName);
                         }
+                    }
+                    
+                    // Replace empty class name with "Global" after demangling
+                    if (className == null || className.trim().isEmpty()) {
+                        className = "Global";
                     }
                     
                     // Add function to class's function list
