@@ -16,8 +16,8 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 
 import java.util.function.Consumer;
-
-import org.antlr.v4.runtime.tree.ParseTree;
+import java.util.HashMap;
+import java.util.Map;
 
 public class GhidraProject {
     private static final Logger LOGGER = Logger.getLogger(GhidraProject.class.getName());
@@ -122,26 +122,44 @@ public class GhidraProject {
                 JSONArray functionData = new JSONArray(functionDataBuilder.toString());
                 LOGGER.info("Processing " + classData.length() + " classes and " + functionData.length() + " functions from Ghidra analysis");
                 
-                // Process class data as before
-                for (int i = 0; i < classData.length(); i++) {
-                    JSONObject classObj = classData.getJSONObject(i);
-                    String className = classObj.getString("ClassName");
-                    JSONArray functions = classObj.getJSONArray("Functions");
-                    LOGGER.info("Inserting class: " + className + " with " + functions.length() + " functions");
-                    dbHandler.insertClass(className, functions.toString());
-                }
+                // Process both class and function data together
+                Map<String, JSONArray> classToFunctions = new HashMap<>();
+                Map<String, String> demangledClassNames = new HashMap<>();
 
-                // Process new function data
+                // First pass: organize functions by class and demangle class names
                 for (int i = 0; i < functionData.length(); i++) {
                     JSONObject functionObj = functionData.getJSONObject(i);
-                    String className = functionObj.getString("ClassName");
                     String functionName = functionObj.getString("FunctionName");
+                    String className = functionObj.getString("ClassName");
                     String decompiledCode = functionObj.getString("DecompiledCode");
                     
-                    // Remove Ghidra comments before parsing
-                    decompiledCode = decompiledCode.replaceAll("/\\*.*\\*/", "");  // Ghidra comments
+                    // Replace empty class name with "Global"
+                    if (className == null || className.trim().isEmpty()) {
+                        className = "Global";
+                    }
                     
-                    // Add headers first
+                    // For Swift binaries, get the class name from the function name
+                    if (!config.isMac() && targetMacho.isSwift() && functionName.startsWith("_$s")) {
+                        DemangleSwift.DemangledName demangledName = DemangleSwift.demangleSwiftName(functionName);
+                        if (demangledName != null) {
+                            LOGGER.info("Demangled function name from " + functionName + " to " + demangledName.fullMethodName);
+                            // Use the class name from the demangled function name
+                            className = demangledName.className;
+                            functionName = demangledName.fullMethodName;
+                            LOGGER.info("Using class name from demangled function: " + className);
+                        } else {
+                            LOGGER.warning("Failed to demangle Swift symbol: " + functionName);
+                        }
+                    }
+                    
+                    // Add function to class's function list
+                    classToFunctions.computeIfAbsent(className, k -> new JSONArray())
+                                    .put(functionName);
+                    
+                    // Process and store the decompiled code
+                    decompiledCode = decompiledCode.replaceAll("/\\*.*\\*/", "");  // Remove Ghidra comments
+                    
+                    // Add headers with the correct class name
                     if (!decompiledCode.trim().startsWith("// Class:") && !decompiledCode.trim().startsWith("// Function:")) {
                         StringBuilder contentBuilder = new StringBuilder();
                         contentBuilder.append("// Class: ").append(className).append("\n");
@@ -150,27 +168,17 @@ public class GhidraProject {
                         decompiledCode = contentBuilder.toString();
                     }
 
-                    // Then parse and format the code with headers included
-                    SyntaxParser parser = new SyntaxParser(null);
-                    String formattedCode = parser.parseAndFormatCode(decompiledCode);
-                    
-                    // Now collect cross-references from the formatted code
-                    parser = new SyntaxParser(dbHandler);
-                    parser.setContext(functionName, className);
-                    parser.collectCrossReferences(formattedCode);
+                    // Store function decompilation with the correct class name
+                    LOGGER.info("Storing decompilation for " + className + "::" + functionName);
+                    dbHandler.updateFunctionDecompilation(functionName, className, decompiledCode);
+                }
 
-                    // Store the formatted code and notify console
-                    String updateMessage = "Updating function: " + functionName + " in class: " + className + " with formatted code";
-                    LOGGER.info(updateMessage);
-                    if (consoleOutputCallback != null) {
-                        consoleOutputCallback.accept(updateMessage);
-                    }
-                    dbHandler.updateFunctionDecompilation(functionName, className, formattedCode);
-                    
-                    // Add database update confirmation to console
-                    if (consoleOutputCallback != null) {
-                        consoleOutputCallback.accept("Database update for " + functionName + " affected 1 rows");
-                    }
+                // Store class data
+                for (Map.Entry<String, JSONArray> entry : classToFunctions.entrySet()) {
+                    String className = entry.getKey();
+                    JSONArray functions = entry.getValue();
+                    LOGGER.info("Inserting class: " + className + " with " + functions.length() + " functions");
+                    dbHandler.insertClass(className, functions.toString());
                 }
 
                 // Add this new section to process strings
