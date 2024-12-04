@@ -128,7 +128,7 @@ public class Config {
     }
 
     public String getLocalModelUrl() {
-        return properties.getProperty(LOCAL_MODEL_URL, "http://localhost:5000/api/inference");
+        return properties.getProperty(LOCAL_MODEL_URL, "http://localhost:1234/v1/chat/completions");
     }
 
     public void setLocalModelUrl(String url) {

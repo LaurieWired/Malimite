@@ -88,7 +88,7 @@
               <arguments>
                 <argument>-package</argument>
                 <argument>com.lauriewired.malimite.decompile.antlr</argument>
-                <argument>-visitor</argument> <!-- Added to enable Visitor generation -->
+                <argument>-visitor</argument>
               </arguments>
             </configuration>
           </execution>
@@ -127,9 +127,40 @@
           <release>11</release>
         </configuration>
       </plugin>
-    </plugins>
 
-    <!-- Add resources configuration -->
+      <!-- Shade Plugin -->
+<plugin>
+  <groupId>org.apache.maven.plugins</groupId>
+  <artifactId>maven-shade-plugin</artifactId>
+  <version>3.5.0</version>
+  <executions>
+    <execution>
+      <phase>package</phase>
+      <goals>
+        <goal>shade</goal>
+      </goals>
+      <configuration>
+        <filters>
+          <filter>
+            <artifact>*:*</artifact>
+            <!-- Exclude signature files -->
+            <excludes>
+              <exclude>META-INF/*.SF</exclude>
+              <exclude>META-INF/*.DSA</exclude>
+              <exclude>META-INF/*.RSA</exclude>
+            </excludes>
+          </filter>
+        </filters>
+        <transformers>
+          <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+            <mainClass>com.lauriewired.malimite.Malimite</mainClass>
+          </transformer>
+        </transformers>
+      </configuration>
+    </execution>
+        </executions>
+      </plugin>
+    </plugins>
     <resources>
       <resource>
         <directory>src/main/resources</directory>

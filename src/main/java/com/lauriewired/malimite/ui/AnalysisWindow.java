@@ -1200,7 +1200,7 @@ public class AnalysisWindow {
                 String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className);
                 if (functionDecompilation != null && !functionDecompilation.isEmpty()) {
                     // Only add function header if it's not already present
-                    if (!functionDecompilation.trim().startsWith("// Function:")) {
+                    if (!functionDecompilation.trim().startsWith("// Class:") && !functionDecompilation.trim().startsWith("// Function:")) {
                         fullDecompilation.append("// Function: ").append(functionName).append("\n");
                     }
                     fullDecompilation.append(functionDecompilation).append("\n\n");

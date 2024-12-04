@@ -23,31 +23,25 @@ public class AIBackend {
         private final String displayName;
         private final String provider;
         private final String modelId;
-        private String customUrl;
 
         public Model(String displayName, String provider, String modelId) {
             this.displayName = displayName;
             this.provider = provider;
             this.modelId = modelId;
-            this.customUrl = null;
-        }
-
-        public Model(String displayName, String provider, String modelId, String customUrl) {
-            this(displayName, provider, modelId);
-            this.customUrl = customUrl;
         }
 
         public String getDisplayName() { return displayName; }
         public String getProvider() { return provider; }
         public String getModelId() { return modelId; }
-        public String getCustomUrl() { return customUrl; }
-        public void setCustomUrl(String url) { this.customUrl = url; }
     }
 
     private static final Model[] SUPPORTED_MODELS = {
         new Model("OpenAI GPT-4 Turbo", "openai", "gpt-4-turbo"),
         new Model("OpenAI GPT-4 Mini", "openai", "gpt-4-mini"),
-        new Model("Custom Model", "custom", "custom")
+        new Model("Local Model", "local", "local-model")
+        
+        // TODO: Add support for Claude
+        //new Model("Claude", "claude", "claude-v1"),
     };
 
     public static Model[] getSupportedModels() {
@@ -100,16 +94,8 @@ public class AIBackend {
                 }
                 return sendClaudeRequest(CLAUDE_API_URL, claudeKey, inputText, modelId);
 
-            case "custom":
-                Model customModel = findCustomModel();
-                if (customModel.getCustomUrl() == null || customModel.getCustomUrl().trim().isEmpty()) {
-                    String url = showCustomUrlDialog();
-                    if (url == null || url.trim().isEmpty()) {
-                        throw new ApiKeyMissingException("Custom URL is required");
-                    }
-                    customModel.setCustomUrl(url);
-                }
-                return sendCustomModelRequest(customModel.getCustomUrl(), inputText);
+            case "local":
+                return sendLocalModelRequest(config.getLocalModelUrl(), inputText);
 
             default:
                 throw new IllegalArgumentException("Unsupported provider: " + provider);
@@ -163,6 +149,16 @@ public class AIBackend {
     private static String parseOpenAIResponse(String jsonResponse) {
         try {
             JSONObject json = new JSONObject(jsonResponse);
+            
+            // Check for error response
+            if (json.has("error")) {
+                JSONObject error = json.getJSONObject("error");
+                String errorMessage = error.getString("message");
+                LOGGER.log(Level.SEVERE, "OpenAI API Error: " + errorMessage);
+                return "Error: " + errorMessage;
+            }
+
+            // Parse successful response
             JSONArray choices = json.getJSONArray("choices");
             if (choices.length() > 0) {
                 JSONObject firstChoice = choices.getJSONObject(0);
@@ -180,10 +176,15 @@ public class AIBackend {
                 }
                 return content;
             }
+            
+            // If we get here, something unexpected happened
+            LOGGER.log(Level.WARNING, "Unexpected OpenAI response format: " + jsonResponse);
+            return "Error: Unexpected response format";
+            
         } catch (JSONException e) {
-            LOGGER.log(Level.SEVERE, "Error parsing OpenAI response", e);
+            LOGGER.log(Level.SEVERE, "Error parsing OpenAI response: " + jsonResponse, e);
+            return "Error parsing response: " + e.getMessage();
         }
-        return jsonResponse; // Return original response if parsing fails
     }
 
     private static String sendClaudeRequest(String apiUrl, String apiKey, String inputText, String modelId) throws IOException {
@@ -203,68 +204,93 @@ public class AIBackend {
         return executeRequest(conn, jsonInputString);
     }    
 
-    private static String sendCustomModelRequest(String apiUrl, String inputText) throws IOException {
+    private static boolean isChatCompatible(String apiUrl) {
+        // Check if the URL contains common chat model endpoints
+        return apiUrl.contains("localhost:1234") || // LM Studio
+               apiUrl.contains("localhost:5000") || // Text Generation WebUI
+               apiUrl.contains("localhost:8080");   // Ollama
+    }
+
+    private static String sendLocalModelRequest(String apiUrl, String inputText) throws IOException {
+        boolean chatCompatible = isChatCompatible(apiUrl);
+
+        // Use the base URL provided by the user
         URL url = new URL(apiUrl);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json");
         conn.setDoOutput(true);
 
-        // Use same format as OpenAI for custom endpoints
-        String jsonInputString = String.format(
-            "{" +
-                "\"messages\": [" +
-                    "{" +
+        String jsonInputString;
+        if (chatCompatible) {
+            // Use the chat-compatible format
+            jsonInputString = String.format(
+                "{" +
+                    "\"model\": \"local-model\"," +
+                    "\"messages\": [{" +
                         "\"role\": \"user\"," +
                         "\"content\": \"%s\"" +
-                    "}" +
-                "]" +
-            "}", inputText.replace("\"", "\\\""));
+                    "}]," +
+                    "\"max_tokens\": 2000," +
+                    "\"temperature\": 0.7" +
+                "}",
+                escapeJsonString(inputText)
+            );
+        } else {
+            // Use the simple completion format
+            jsonInputString = String.format(
+                "{" +
+                    "\"model\": \"local-model\"," +
+                    "\"prompt\": \"%s\"," +
+                    "\"max_tokens\": 2000," +
+                    "\"temperature\": 0.7" +
+                "}",
+                escapeJsonString(inputText)
+            );
+        }
 
         String response = executeRequest(conn, jsonInputString);
-        return parseCustomModelResponse(response);
+        return parseLocalModelResponse(response);
     }
 
-    private static String parseCustomModelResponse(String jsonResponse) {
+    private static String parseLocalModelResponse(String jsonResponse) {
         try {
-            // First try OpenAI format
-            return parseOpenAIResponse(jsonResponse);
-        } catch (Exception e) {
-            // If that fails, return the raw response
-            LOGGER.log(Level.INFO, "Could not parse as OpenAI response, returning raw response", e);
+            JSONObject json = new JSONObject(jsonResponse);
+            
+            // Try chat completion format first
+            if (json.has("choices")) {
+                JSONArray choices = json.getJSONArray("choices");
+                if (choices.length() > 0) {
+                    JSONObject choice = choices.getJSONObject(0);
+                    if (choice.has("message")) {
+                        return choice.getJSONObject("message").getString("content");
+                    } else if (choice.has("text")) {
+                        return choice.getString("text");
+                    }
+                }
+            }
+            
+            // Fall back to simple completion format
+            if (json.has("generated_text")) {
+                return json.getString("generated_text");
+            }
+            
+            // If no recognized format is found, return the raw response
+            return jsonResponse;
+        } catch (JSONException e) {
+            LOGGER.log(Level.SEVERE, "Error parsing Local Model response", e);
             return jsonResponse;
         }
     }
 
-    private static Model findCustomModel() {
-        for (Model model : SUPPORTED_MODELS) {
-            if ("custom".equals(model.getProvider())) {
-                return model;
-            }
-        }
-        throw new IllegalStateException("Custom model not found in SUPPORTED_MODELS");
-    }
-
-    private static String showCustomUrlDialog() {
-        try {
-            final String[] result = new String[1];
-            SwingUtilities.invokeAndWait(() -> {
-                String url = JOptionPane.showInputDialog(
-                    null,
-                    "Enter the URL for your custom model API:",
-                    "Custom Model Configuration",
-                    JOptionPane.PLAIN_MESSAGE
-                );
-                if (url != null && !url.trim().isEmpty() && !url.startsWith("http")) {
-                    url = "http://" + url;
-                }
-                result[0] = url;
-            });
-            return result[0];
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error showing custom URL dialog", e);
-            return null;
-        }
+    private static String escapeJsonString(String input) {
+        return input.replace("\\", "\\\\")
+                   .replace("\"", "\\\"")
+                   .replace("\n", "\\n")
+                   .replace("\r", "\\r")
+                   .replace("\t", "\\t")
+                   .replace("\f", "\\f")
+                   .replace("\b", "\\b");
     }
 
     private static String executeRequest(HttpURLConnection conn, String jsonInputString) throws IOException {

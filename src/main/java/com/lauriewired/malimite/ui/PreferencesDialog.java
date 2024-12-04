@@ -70,12 +70,22 @@ public class PreferencesDialog {
         openaiPanel.add(openaiKeyField);
         mainPanel.add(openaiPanel);
 
+        /*
+        TODO Add back in when claude tested
         // Add Claude API Key field
         JPanel claudePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         claudePanel.add(new JLabel("Claude API Key:"));
         JPasswordField claudeKeyField = new JPasswordField(config.getClaudeApiKey(), 30);
         claudePanel.add(claudeKeyField);
         mainPanel.add(claudePanel);
+        */
+
+        // Add Local Model URL field
+        JPanel localModelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        localModelPanel.add(new JLabel("Local Model URL:"));
+        JTextField localModelUrlField = new JTextField(config.getLocalModelUrl(), 30);
+        localModelPanel.add(localModelUrlField);
+        mainPanel.add(localModelPanel);
 
         // Add some vertical spacing
         mainPanel.add(Box.createVerticalStrut(10));
@@ -108,7 +118,8 @@ public class PreferencesDialog {
             config.setTheme(newTheme);
             config.setGhidraPath(newGhidraPath);
             config.setOpenAIApiKey(new String(openaiKeyField.getPassword()));
-            config.setClaudeApiKey(new String(claudeKeyField.getPassword()));
+            //config.setClaudeApiKey(new String(claudeKeyField.getPassword()));
+            config.setLocalModelUrl(localModelUrlField.getText());
             config.saveConfig();
             
             // Apply theme change if it was modified
