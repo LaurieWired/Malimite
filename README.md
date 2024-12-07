@@ -34,7 +34,7 @@ For full Installation steps consult the Wiki.
 
 # Usage + Prequisites
 
-### Check out the **[Wiki](https://github.com/LaurieWired/Malimite/wiki)** for more detials.
+### Check out the **[Wiki](https://github.com/LaurieWired/Malimite/wiki)** for more details.
 
 
 # Contribute
