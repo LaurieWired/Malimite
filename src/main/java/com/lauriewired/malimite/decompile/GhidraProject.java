@@ -46,7 +46,7 @@ public class GhidraProject {
     public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho) {
         LOGGER.info("Starting Ghidra decompilation for: " + executableFilePath);
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-            serverSocket.setSoTimeout(300000); // 5 minute timeout for initial connection
+            serverSocket.setSoTimeout(0); // no timeout for initial connection
 
             String analyzeHeadless = getAnalyzeHeadlessPath();
             
