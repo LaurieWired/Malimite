@@ -62,6 +62,10 @@ public class SelectFile {
             nameLabel.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseClicked(MouseEvent e) {
+                    if (e.getButton() == MouseEvent.BUTTON2) {
+                        onClose.run();
+                        return;
+                    }
                     setActiveFile(filePath);
                 }
             });
