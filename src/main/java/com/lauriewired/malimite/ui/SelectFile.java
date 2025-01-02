@@ -59,7 +59,7 @@ public class SelectFile {
             add(nameLabel);
             add(closeButton);
             
-            nameLabel.addMouseListener(new MouseAdapter() {
+            this.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseClicked(MouseEvent e) {
                     if (e.getButton() == MouseEvent.BUTTON2) {
