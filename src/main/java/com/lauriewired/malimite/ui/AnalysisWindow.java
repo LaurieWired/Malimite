@@ -674,11 +674,9 @@ public class AnalysisWindow {
         LOGGER.info("Beginning file analysis process");
         
         if (FileProcessing.isArchiveFile(file)) {
-            System.out.println("LAURIEEEEEE isArchiveFile: " + file.getName());
             // Handle archive files (IPA, ZIP, etc.)
             unzipAndLoadToTree(file, filesRootNode, classesRootNode);
         } else if (file.isDirectory() || file.getName().endsWith(".app")) {
-            System.out.println("LAURIEEEEEE isDirectory: " + file.getName());
             // Handle directories and .app bundles
             loadDirectoryToTree(file, filesRootNode, classesRootNode);
         } else {
