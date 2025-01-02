@@ -48,6 +48,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,6 +84,8 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Rectangle;
+
+import java.nio.file.Files;
 
 public class AnalysisWindow {
     private static final Logger LOGGER = Logger.getLogger(AnalysisWindow.class.getName());
@@ -668,19 +671,28 @@ public class AnalysisWindow {
         fileEntriesMap.clear();
         fileContentArea.setText("");
     
-        LOGGER.info("Beginning file unzip and analysis process");
-        unzipAndLoadToTree(file, filesRootNode, classesRootNode);
+        LOGGER.info("Beginning file analysis process");
         
-        // Update this line to use FileProcessing
-        Project project = FileProcessing.updateFileInfo(new File(currentFilePath), projectMacho);
+        if (FileProcessing.isArchiveFile(file)) {
+            System.out.println("LAURIEEEEEE isArchiveFile: " + file.getName());
+            // Handle archive files (IPA, ZIP, etc.)
+            unzipAndLoadToTree(file, filesRootNode, classesRootNode);
+        } else if (file.isDirectory() || file.getName().endsWith(".app")) {
+            System.out.println("LAURIEEEEEE isDirectory: " + file.getName());
+            // Handle directories and .app bundles
+            loadDirectoryToTree(file, filesRootNode, classesRootNode);
+        } else {
+            LOGGER.warning("Unsupported file type: " + file.getName());
+            return;
+        }
+        
+        // Update project info
+        Project project = FileProcessing.updateFileInfo(file, projectMacho);
         config.addProjectPath(project.getFilePath());
-        currentProject = project;  // Keep track of current project
+        currentProject = project;
         infoDisplay.setText(project.generateInfoString());
         
-        // Add this line to populate the strings panel after loading the tree
         populateMachoStringsPanel();
-
-        // Add this line after populating the strings panel
         populateResourceStringsPanel();
 
         // Select Info.plist node by default and display its content
@@ -691,8 +703,105 @@ public class AnalysisWindow {
             fileTree.scrollPathToVisible(infoPath);
             SelectFile.addFile(infoPath);
             
-            // Add this line to trigger content display
             displaySelectedFileContent(new TreeSelectionEvent(fileTree, infoPath, false, null, null));
+        }
+    }
+
+    private static void loadDirectoryToTree(File directory, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
+        LOGGER.info("Loading directory: " + directory.getAbsolutePath());
+        
+        // Create app node if this is an .app bundle
+        DefaultMutableTreeNode appNode = directory.getName().endsWith(".app") ? 
+            new DefaultMutableTreeNode(directory.getName()) : null;
+        if (appNode != null) {
+            filesRootNode.add(appNode);
+        }
+        
+        // Process all files in the directory
+        processDirectory(directory, appNode != null ? appNode : filesRootNode, "");
+        
+        // Find Info.plist with CFBundleIdentifier
+        DefaultMutableTreeNode foundInfoNode = findInfoPlistWithBundleId(directory, appNode != null ? appNode : filesRootNode);
+        if (foundInfoNode != null) {
+            String nodePath = NodeOperations.buildFullPathFromNode(foundInfoNode);
+            infoPlist = new InfoPlist(foundInfoNode, fileEntriesMap.get(nodePath), fileEntriesMap);
+            updateBundleIdDisplay(infoPlist.getBundleIdentifier());
+            
+            // Initialize project if Info.plist was found
+            initializeProject();
+            populateClassesNode(classesRootNode);
+            
+            // Process resource strings
+            processResourceStrings(directory, appNode);
+            
+            // Select Info.plist node and display its content
+            TreePath infoPath = new TreePath(treeModel.getPathToRoot(foundInfoNode));
+            fileTree.setSelectionPath(infoPath);
+            fileTree.scrollPathToVisible(infoPath);
+            SelectFile.addFile(infoPath);
+            displaySelectedFileContent(new TreeSelectionEvent(fileTree, infoPath, false, null, null));
+        }
+        
+        treeModel.reload();
+    }
+
+    private static DefaultMutableTreeNode findInfoPlistWithBundleId(File directory, DefaultMutableTreeNode rootNode) {
+        File[] files = directory.listFiles();
+        if (files == null) return null;
+
+        for (File file : files) {
+            if (file.getName().equals("Info.plist")) {
+                try {
+                    // Read the file as bytes first
+                    byte[] contentBytes = Files.readAllBytes(file.toPath());
+                    
+                    // Check if it's a binary plist and decode appropriately
+                    String content;
+                    if (PlistUtils.isBinaryPlist(contentBytes)) {
+                        content = PlistUtils.decodeBinaryPropertyList(contentBytes);
+                    } else {
+                        content = new String(contentBytes);
+                    }
+
+                    if (content.contains("CFBundleIdentifier")) {
+                        // Find the existing Info.plist node in the tree
+                        Enumeration<?> e = rootNode.breadthFirstEnumeration();
+                        while (e.hasMoreElements()) {
+                            DefaultMutableTreeNode node = (DefaultMutableTreeNode) e.nextElement();
+                            if (node.getUserObject().toString().equals("Info.plist")) {
+                                return node;
+                            }
+                        }
+                    }
+                } catch (IOException e) {
+                    LOGGER.log(Level.SEVERE, "Error reading Info.plist: " + e.getMessage(), e);
+                }
+            } else if (file.isDirectory()) {
+                DefaultMutableTreeNode result = findInfoPlistWithBundleId(file, rootNode);
+                if (result != null) {
+                    return result;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static void processDirectory(File directory, DefaultMutableTreeNode parentNode, String currentPath) {
+        File[] files = directory.listFiles();
+        if (files == null) return;
+
+        for (File file : files) {
+            String newPath = currentPath.isEmpty() ? file.getName() : currentPath + "/" + file.getName();
+            
+            if (file.isDirectory()) {
+                DefaultMutableTreeNode dirNode = new DefaultMutableTreeNode(file.getName());
+                parentNode.add(dirNode);
+                processDirectory(file, dirNode, newPath);
+            } else {
+                DefaultMutableTreeNode fileNode = new DefaultMutableTreeNode(file.getName());
+                parentNode.add(fileNode);
+                fileEntriesMap.put(NodeOperations.buildFullPathFromNode(fileNode), file.getAbsolutePath());
+            }
         }
     }
 
@@ -704,21 +813,39 @@ public class AnalysisWindow {
             ZipEntry entry = zipIn.getNextEntry();
             DefaultMutableTreeNode appNode = null;
             
-            // First pass: Find and process Info.plist to initialize infoPlist object
+            // First pass: Find and process Info.plist containing CFBundleIdentifier
             while (entry != null) {
-                if (entry.getName().endsWith(".app/Info.plist")) {
-                    
-                    DefaultMutableTreeNode infoNode = new DefaultMutableTreeNode("Info.plist");
-                    filesRootNode.add(infoNode);
-                    String nodePath = NodeOperations.buildFullPathFromNode(infoNode);
-                    fileEntriesMap.put(nodePath, entry.getName());
-                    infoPlist = new InfoPlist(infoNode, currentFilePath, fileEntriesMap);
-                    updateBundleIdDisplay(infoPlist.getBundleIdentifier());
-                    
-                    // Remove Info.plist from fileEntriesMap so it can be processed separately later
-                    fileEntriesMap.remove(nodePath); // Not ideal for perf since we process it twice but will optimize later
-                    filesRootNode.remove(infoNode);
-                    break;
+                if (entry.getName().endsWith("Info.plist")) {
+                    // Read the content of the Info.plist file
+                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                    byte[] buffer = new byte[4096];
+                    int len;
+                    while ((len = zipIn.read(buffer)) > 0) {
+                        outputStream.write(buffer, 0, len);
+                    }
+                    byte[] contentBytes = outputStream.toByteArray();
+
+                    // Check if this Info.plist contains CFBundleIdentifier
+                    String content;
+                    if (PlistUtils.isBinaryPlist(contentBytes)) {
+                        content = PlistUtils.decodeBinaryPropertyList(contentBytes);
+                    } else {
+                        content = new String(contentBytes);
+                    }
+
+                    if (content.contains("CFBundleIdentifier")) {
+                        DefaultMutableTreeNode infoNode = new DefaultMutableTreeNode("Info.plist");
+                        filesRootNode.add(infoNode);
+                        String nodePath = NodeOperations.buildFullPathFromNode(infoNode);
+                        fileEntriesMap.put(nodePath, entry.getName());
+                        infoPlist = new InfoPlist(infoNode, currentFilePath, fileEntriesMap);
+                        updateBundleIdDisplay(infoPlist.getBundleIdentifier());
+                        
+                        // Remove Info.plist from fileEntriesMap so it can be processed separately later
+                        fileEntriesMap.remove(nodePath);
+                        filesRootNode.remove(infoNode);
+                        break;
+                    }
                 }
                 zipIn.closeEntry();
                 entry = zipIn.getNextEntry();
@@ -874,8 +1001,14 @@ public class AnalysisWindow {
                 publish("Loading Mach-O file...");
                 projectMacho = new Macho(executableFilePath, projectDirectoryPath, infoPlist.getExecutableName());
 
-                String dbFilePath = projectDirectoryPath + File.separator + 
-                    projectMacho.getMachoExecutableName() + "_malimite.db";
+                // Get the input file name without extension
+                String inputFileName = new File(currentFilePath).getName();
+                int lastDotIndex = inputFileName.lastIndexOf('.');
+                if (lastDotIndex > 0) {
+                    inputFileName = inputFileName.substring(0, lastDotIndex);
+                }
+                
+                String dbFilePath = projectDirectoryPath + File.separator + inputFileName + "_malimite.db";
                 LOGGER.info("Checking for database at: " + dbFilePath);
 
                 File dbFile = new File(dbFilePath);
@@ -915,7 +1048,7 @@ public class AnalysisWindow {
 
                     publish("Creating new database...");
                     dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
-                        projectMacho.getMachoExecutableName() + "_malimite.db");
+                        inputFileName + "_malimite.db");
 
                     publish("Starting Ghidra analysis...");
                     ghidraProject = new GhidraProject(infoPlist.getExecutableName(), 
@@ -930,7 +1063,7 @@ public class AnalysisWindow {
                 } else {
                     publish("Loading existing database...");
                     dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 
-                        projectMacho.getMachoExecutableName() + "_malimite.db");
+                        inputFileName + "_malimite.db");
                 }
 
                 // After dbHandler is initialized, set it in ResourceParser
@@ -1040,8 +1173,18 @@ public class AnalysisWindow {
         }
     }
 
-    private static void processResourceStrings(File fileToUnzip, DefaultMutableTreeNode appNode) {
-        try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(fileToUnzip))) {
+    private static void processResourceStrings(File inputFile, DefaultMutableTreeNode appNode) {
+        if (FileProcessing.isArchiveFile(inputFile)) {
+            // Handle archive files (IPA, ZIP, etc.)
+            processArchiveResourceStrings(inputFile, appNode);
+        } else {
+            // Handle directories and .app bundles
+            processDirectoryResourceStrings(inputFile, appNode);
+        }
+    }
+
+    private static void processArchiveResourceStrings(File archiveFile, DefaultMutableTreeNode appNode) {
+        try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(archiveFile))) {
             ZipEntry entry = zipIn.getNextEntry();
             
             while (entry != null) {
@@ -1063,7 +1206,56 @@ public class AnalysisWindow {
                 entry = zipIn.getNextEntry();
             }
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Error processing resource strings", e);
+            LOGGER.log(Level.SEVERE, "Error processing archive resource strings", e);
+        }
+    }
+
+    private static void processDirectoryResourceStrings(File directory, DefaultMutableTreeNode appNode) {
+        try {
+            // Get the app directory if it exists
+            File appDirectory = directory;
+            if (appNode != null) {
+                String appName = appNode.getUserObject().toString();
+                if (directory.getName().equals(appName)) {
+                    appDirectory = directory;
+                } else {
+                    File[] files = directory.listFiles();
+                    if (files != null) {
+                        for (File file : files) {
+                            if (file.getName().equals(appName)) {
+                                appDirectory = file;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Process all files in the directory recursively
+            processDirectoryContents(appDirectory);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error processing directory resource strings", e);
+        }
+    }
+
+    private static void processDirectoryContents(File directory) {
+        if (directory == null || !directory.exists()) {
+            return;
+        }
+
+        File[] files = directory.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    processDirectoryContents(file);
+                } else if (ResourceParser.isResource(file.getName())) {
+                    try (FileInputStream inputStream = new FileInputStream(file)) {
+                        ResourceParser.parseResourceForStrings(inputStream, file.getAbsolutePath());
+                    } catch (IOException e) {
+                        LOGGER.log(Level.SEVERE, "Error processing resource file: " + file.getName(), e);
+                    }
+                }
+            }
         }
     }
 
@@ -1113,9 +1305,18 @@ public class AnalysisWindow {
 
         if (currentFilePath != null) {
             try {
-                byte[] contentBytes = FileProcessing.readContentFromZip(currentFilePath, entryPath);
-                String contentText;
+                byte[] contentBytes;
+                File file = new File(currentFilePath);
+                
+                if (FileProcessing.isArchiveFile(file)) {
+                    // Handle archive files (IPA, ZIP, etc.)
+                    contentBytes = FileProcessing.readContentFromZip(currentFilePath, entryPath);
+                } else {
+                    // Handle directories and .app bundles - read file directly
+                    contentBytes = Files.readAllBytes(new File(entryPath).toPath());
+                }
 
+                String contentText;
                 setSyntaxStyle(entryPath);
 
                 // Check if this is a mobile provision file
@@ -1136,11 +1337,11 @@ public class AnalysisWindow {
                 fileContentArea.setText(contentText);
                 fileContentArea.setCaretPosition(0);
             } catch (IOException ex) {
-                ex.printStackTrace();
+                LOGGER.log(Level.SEVERE, "Error reading file content", ex);
+                fileContentArea.setText("Error reading file: " + ex.getMessage());
             } catch (Exception ex) {
-                // Handle other exceptions that might occur during mobile provision parsing
-                LOGGER.log(Level.SEVERE, "Error parsing mobile provision file", ex);
-                fileContentArea.setText("Error parsing mobile provision file: " + ex.getMessage());
+                LOGGER.log(Level.SEVERE, "Error processing file content", ex);
+                fileContentArea.setText("Error processing file: " + ex.getMessage());
             }
         }
     }

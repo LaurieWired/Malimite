@@ -104,18 +104,31 @@ public class FileProcessing {
      */
     public static String extractMachoToProjectDirectory(String filePath, String executableName, String projectDirectoryPath) {
         LOGGER.info("filePath: " + filePath + " executableName: " + executableName + " projectDirectoryPath: " + projectDirectoryPath);
-        if (filePath == null || filePath.isEmpty() || 
-            executableName == null || executableName.isEmpty()) {
-            LOGGER.warning("Failed to extract executable");
+        if (filePath == null || filePath.isEmpty()) {
+            LOGGER.warning("Invalid file path");
             return "";
         }
 
-        LOGGER.info(filePath + " " + executableName);
+        // Extract the base name of the input file
+        File inputFile = new File(filePath);
+        String baseName = inputFile.getName();
+        int lastDotIndex = baseName.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            baseName = baseName.substring(0, lastDotIndex);
+        }
 
-        // Extract the base name of the .ipa file
-        File ipaFile = new File(filePath);
-        String baseName = ipaFile.getName().replaceFirst("[.][^.]+$", "");
-        return ipaFile.getParent() + File.separator + baseName + "_malimite";
+        // If executableName is empty or null, just use the input file name
+        if (executableName == null || executableName.isEmpty()) {
+            LOGGER.info("No executable name provided, using input file name: " + baseName);
+        } else {
+            LOGGER.info("Using executable name: " + executableName);
+        }
+
+        // Create project directory name based on input file name
+        String projectDirPath = inputFile.getParent() + File.separator + baseName + "_malimite";
+        LOGGER.info("Created project directory path: " + projectDirPath);
+        
+        return projectDirPath;
     }
     
     /*
@@ -139,12 +152,39 @@ public class FileProcessing {
                 saveProjectConfig(projectDirectoryPath, project);
                 addProjectToList(filePath);
 
-                // Unzip the executable into the new project directory
-                String outputFilePath = projectDirectoryPath + File.separator + executableName;
-                try {
-                    unzipExecutable(filePath, executableName, outputFilePath);
-                } catch (IOException e) {
-                    LOGGER.log(Level.SEVERE, "Error unzipping executable", e);
+                File inputFile = new File(filePath);
+                if (isArchiveFile(inputFile)) {
+                    // Handle archive files (IPA, ZIP, etc.)
+                    if (executableName != null && !executableName.isEmpty()) {
+                        // Unzip the executable into the new project directory
+                        String outputFilePath = projectDirectoryPath + File.separator + executableName;
+                        try {
+                            unzipExecutable(filePath, executableName, outputFilePath);
+                        } catch (IOException e) {
+                            LOGGER.log(Level.SEVERE, "Error unzipping executable", e);
+                        }
+                    } else {
+                        LOGGER.warning("No executable name provided for archive file");
+                    }
+                } else if (inputFile.isDirectory() || inputFile.getName().endsWith(".app")) {
+                    // Handle directories and .app bundles
+                    // Find the executable in the directory
+                    File[] files = inputFile.listFiles();
+                    if (files != null) {
+                        for (File file : files) {
+                            if (file.getName().equals(executableName)) {
+                                // Copy the executable to the project directory
+                                String outputFilePath = projectDirectoryPath + File.separator + executableName;
+                                try {
+                                    Files.copy(file.toPath(), new File(outputFilePath).toPath());
+                                    LOGGER.info("Copied executable to: " + outputFilePath);
+                                } catch (IOException e) {
+                                    LOGGER.log(Level.SEVERE, "Error copying executable", e);
+                                }
+                                break;
+                            }
+                        }
+                    }
                 }
             } else {
                 LOGGER.warning("Failed to create project directory: " + projectDirectoryPath);
@@ -169,6 +209,15 @@ public class FileProcessing {
             System.err.println("Failed to load project configuration: " + e.getMessage());
             return null;
         }
+    }
+
+    public static boolean isArchiveFile(File file) {
+        String name = file.getName().toLowerCase();
+        return name.endsWith(".ipa") || 
+               name.endsWith(".zip") || 
+               name.endsWith(".tar") || 
+               name.endsWith(".gz") ||
+               name.endsWith(".7z");
     }
 
     private static void addProjectToList(String projectPath) {
