@@ -49,7 +49,7 @@ public class ApplicationMenu {
         fileMenu.addSeparator();
 
         addMenuItem(fileMenu, "Configure Libraries", e -> {
-            SwingUtilities.invokeLater(() -> LibraryConfigDialog.show(parentFrame));
+            SwingUtilities.invokeLater(() -> LibraryConfigDialog.show(parentFrame, config));
         });
 
         addMenuItem(fileMenu, "Edit Function", e -> {

@@ -295,9 +295,11 @@ public class SQLiteDBHandler {
             }
             
             // Create a new SyntaxParser and reparse the updated function
-            SyntaxParser parser = new SyntaxParser(this);
-            parser.setContext(functionName, className);
-            parser.collectCrossReferences(decompiledCode);
+            if (decompiledCode != null && !decompiledCode.trim().isEmpty()) {
+                SyntaxParser parser = new SyntaxParser(this);
+                parser.setContext(functionName, className);
+                parser.collectCrossReferences(decompiledCode);
+            }
             
             LOGGER.info("Database update for " + functionName + " affected " + rowsAffected + " rows");
         } catch (SQLException e) {

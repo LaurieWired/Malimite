@@ -18,6 +18,25 @@ import org.json.JSONArray;
 
 public class DumpClassData extends GhidraScript {
 
+    private int port;
+    private List<String> libraryPrefixes;
+
+    private void parseArgs() {
+        String[] args = getScriptArgs();
+        if (args.length < 2) {
+            println("Insufficient arguments. Expected: <port> <libraries>");
+            return;
+        }
+        this.port = Integer.parseInt(args[0]);
+        // Parse libraries from comma-separated string
+        this.libraryPrefixes = Arrays.asList(args[1].split(","));
+    }
+
+    private boolean isLibraryNamespace(String namespace) {
+        return libraryPrefixes.stream()
+            .anyMatch(prefix -> namespace.startsWith(prefix));
+    }
+
     private int getPort() {
         String[] args = getScriptArgs();
         if (args.length > 0) {
@@ -108,15 +127,26 @@ public class DumpClassData extends GhidraScript {
         decompInterface.openProgram(program);
 
         // Collect functions for each namespace
-        for (Function function : functionManager.getFunctions(true)) { // true for forward direction
+        for (Function function : functionManager.getFunctions(true)) {
             Namespace namespace = function.getParentNamespace();
             String namespaceName = formatNamespaceName(namespace != null ? namespace.getName() : "<global>");
             
-            // Add function to namespace map
+            // Skip decompilation if namespace is a library
+            if (isLibraryNamespace(namespaceName)) {
+                // Add basic function info without decompilation
+                JSONObject jsonEntry = new JSONObject();
+                jsonEntry.put("FunctionName", function.getName());
+                jsonEntry.put("ClassName", namespaceName);
+                jsonEntry.put("DecompiledCode", ""); // Empty string for library functions
+                jsonOutput.put(jsonEntry);
+                continue;
+            }
+
+            // Add function to namespace map for non-library functions
             namespaceFunctionsMap.computeIfAbsent(namespaceName, k -> new ArrayList<>()).add(function);
         }
 
-        // Populate JSON data
+        // Decompile non-library functions
         for (Map.Entry<String, List<Function>> entry : namespaceFunctionsMap.entrySet()) {
             String namespace = entry.getKey();
             List<Function> functions = entry.getValue();
@@ -126,7 +156,6 @@ public class DumpClassData extends GhidraScript {
                 if (decompiledFunction.decompileCompleted()) {
                     String decompiledCode = decompiledFunction.getDecompiledFunction().getC();
 
-                    // Add JSON entry
                     JSONObject jsonEntry = new JSONObject();
                     jsonEntry.put("FunctionName", function.getName());
                     jsonEntry.put("ClassName", namespace);
@@ -207,12 +236,24 @@ public class DumpClassData extends GhidraScript {
     @Override
     public void run() throws Exception {
         System.err.println("Running DumpCombinedData script");
-
-        int port = getPort();
+        parseArgs();
+        
         if (port == -1) {
             return;
         }
 
+        // Perform heartbeat check first
+        try (Socket heartbeatSocket = new Socket("localhost", port);
+             PrintWriter heartbeatOut = new PrintWriter(heartbeatSocket.getOutputStream(), true)) {
+            
+            heartbeatOut.println("HEARTBEAT");
+            println("Heartbeat sent successfully, proceeding with analysis...");
+        } catch (IOException e) {
+            printerr("Failed to establish initial connection: " + e.getMessage());
+            return;
+        }
+
+        // Continue with analysis after successful heartbeat
         JSONArray classData = extractClassFunctionData(currentProgram);
         JSONObject machoData = listDefinedDataInAllSegments(currentProgram);
         JSONArray functionData = listFunctionsAndNamespaces(currentProgram);
