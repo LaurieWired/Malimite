@@ -46,10 +46,12 @@ public class GhidraProject {
     public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho) {
         LOGGER.info("Starting Ghidra decompilation for: " + executableFilePath);
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-            serverSocket.setSoTimeout(300000); // 5 minute timeout for initial connection
-
             String analyzeHeadless = getAnalyzeHeadlessPath();
             
+            // Get active libraries and join them with commas
+            List<String> activeLibraries = LibraryDefinitions.getActiveLibraries(config);
+            String librariesArg = String.join(",", activeLibraries);
+
             ProcessBuilder builder = new ProcessBuilder(    
                 analyzeHeadless,
                 projectDirectoryPath,
@@ -61,6 +63,7 @@ public class GhidraProject {
                 "-postScript",
                 "DumpClassData.java",
                 String.valueOf(PORT),
+                librariesArg,  // Add libraries as second argument
                 "-deleteProject"
             );
             
@@ -89,11 +92,28 @@ public class GhidraProject {
             LOGGER.info("Waiting for Ghidra script connection on port " + PORT);
             
             Socket socket = serverSocket.accept();
-            socket.setSoTimeout(0);
+            socket.setSoTimeout(60000); // 1 minute timeout for heartbeat
             LOGGER.info("Connection established with Ghidra script");
 
             try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
-                // Wait for initial connection confirmation
+                // Wait for heartbeat
+                String heartbeat = in.readLine();
+                if (!"HEARTBEAT".equals(heartbeat)) {
+                    throw new RuntimeException("Did not receive heartbeat from Ghidra script");
+                }
+                LOGGER.info("Received heartbeat from Ghidra script");
+                
+                // Close the initial heartbeat connection
+                socket.close();
+                
+                // Accept the new connection for actual data transfer
+                socket = serverSocket.accept();
+                socket.setSoTimeout(0); // No timeout for data transfer
+            }
+
+            // Start new try-with-resources for data transfer
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+                // Continue with the rest of the connection handling
                 String connectionConfirmation = in.readLine();
                 if (!"CONNECTED".equals(connectionConfirmation)) {
                     throw new RuntimeException("Did not receive proper connection confirmation from Ghidra script");
@@ -123,9 +143,6 @@ public class GhidraProject {
                 JSONArray classData = new JSONArray(classDataBuilder.toString());
                 JSONArray functionData = new JSONArray(functionDataBuilder.toString());
                 LOGGER.info("Processing " + classData.length() + " classes and " + functionData.length() + " functions from Ghidra analysis");
-                
-                // Get active libraries from config
-                List<String> activeLibraries = LibraryDefinitions.getActiveLibraries(config);
                 
                 // Process both class and function data together
                 Map<String, JSONArray> classToFunctions = new HashMap<>();

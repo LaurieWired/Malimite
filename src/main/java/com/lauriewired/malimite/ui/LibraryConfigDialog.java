@@ -6,8 +6,7 @@ import javax.swing.*;
 import java.awt.*;
 
 public class LibraryConfigDialog {
-    public static void show(JFrame parent) {
-        Config config = new Config();
+    public static void show(JFrame parent, Config config) {
         JDialog dialog = new JDialog(parent, "Configure Libraries", true);
         dialog.setLayout(new BorderLayout(10, 10));
         dialog.setSize(450, 500);
