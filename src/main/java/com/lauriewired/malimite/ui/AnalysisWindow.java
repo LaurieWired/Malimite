@@ -18,6 +18,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.JTextPane;
 import javax.swing.JToggleButton;
 import javax.swing.JTree;
@@ -142,6 +143,15 @@ public class AnalysisWindow {
     // Add this constant at the class level
     private static final int RIGHT_PANEL_WIDTH = 300;
     private static int lastDividerLocation = -1;  // Store the last divider location
+
+    // Add these as class-level variables
+    private static JPanel searchPanel;
+    private static JTextField searchField;
+    private static JButton nextButton;
+    private static JButton prevButton;
+    private static JLabel matchCountLabel;
+    private static int currentSearchIndex = -1;
+    private static List<Integer> searchResults = new ArrayList<>();
 
     public static void show(File file, Config config) {
         SafeMenuAction.execute(() -> {
@@ -659,6 +669,18 @@ public class AnalysisWindow {
         contentPanel.add(statusPanel, BorderLayout.SOUTH);
 
         KeyboardShortcuts.setupShortcuts(fileContentArea, analysisFrame);
+
+        // Add search panel to the right panel (after the existing fileLabelPanel)
+        rightTopPanel.add(bundleIdPanel, BorderLayout.NORTH);
+        
+        // Create a panel to hold both search and file label panels
+        JPanel topControlsPanel = new JPanel(new BorderLayout());
+        topControlsPanel.add(fileLabelPanel, BorderLayout.CENTER);
+        topControlsPanel.add(setupSearchPanel(), BorderLayout.EAST);
+        rightTopPanel.add(topControlsPanel, BorderLayout.CENTER);
+        
+        rightTopPanel.add(saveButton, BorderLayout.EAST);
+        rightPanel.add(rightTopPanel, BorderLayout.NORTH);
 
         return contentPanel;
     }      
@@ -2169,5 +2191,142 @@ public class AnalysisWindow {
                 System.err.println("Error navigating to line: " + e.getMessage());
             }
         });
+    }
+
+    // Add this method to setup the search panel
+    private static JPanel setupSearchPanel() {
+        searchPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        searchPanel.setVisible(false);
+        
+        // Create search field
+        searchField = new JTextField(20);
+        searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { performSearch(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { performSearch(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { performSearch(); }
+        });
+        
+        // Create navigation buttons
+        prevButton = new JButton("↑");
+        nextButton = new JButton("↓");
+        prevButton.setEnabled(false);
+        nextButton.setEnabled(false);
+        
+        // Create match count label
+        matchCountLabel = new JLabel("0/0");
+        
+        // Create close button
+        JButton closeButton = new JButton("✕");
+        closeButton.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        closeButton.addActionListener(e -> toggleSearchPanel());
+        
+        // Add key bindings for Enter and Shift+Enter
+        searchField.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) {
+                    if (e.isShiftDown()) {
+                        findPrevious();
+                    } else {
+                        findNext();
+                    }
+                } else if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ESCAPE) {
+                    toggleSearchPanel();
+                }
+            }
+        });
+        
+        // Add button actions
+        prevButton.addActionListener(e -> findPrevious());
+        nextButton.addActionListener(e -> findNext());
+        
+        // Add components to panel
+        searchPanel.add(searchField);
+        searchPanel.add(prevButton);
+        searchPanel.add(nextButton);
+        searchPanel.add(matchCountLabel);
+        searchPanel.add(closeButton);
+        
+        return searchPanel;
+    }
+
+    // Add this method to toggle search panel visibility
+    public static void toggleSearchPanel() {
+        searchPanel.setVisible(!searchPanel.isVisible());
+        if (searchPanel.isVisible()) {
+            searchField.requestFocusInWindow();
+            searchField.selectAll();
+        }
+    }
+
+    // Add these methods to handle search functionality
+    private static void performSearch() {
+        String searchText = searchField.getText();
+        searchResults.clear();
+        currentSearchIndex = -1;
+        
+        if (searchText.isEmpty()) {
+            updateSearchUI();
+            return;
+        }
+        
+        String content = fileContentArea.getText();
+        String lowerContent = content.toLowerCase();
+        String lowerSearchText = searchText.toLowerCase();
+        
+        int index = 0;
+        while ((index = lowerContent.indexOf(lowerSearchText, index)) != -1) {
+            searchResults.add(index);
+            index += searchText.length();
+        }
+        
+        if (!searchResults.isEmpty()) {
+            currentSearchIndex = 0;
+            highlightCurrentMatch();
+        }
+        
+        updateSearchUI();
+    }
+
+    private static void findNext() {
+        if (searchResults.isEmpty()) return;
+        
+        currentSearchIndex = (currentSearchIndex + 1) % searchResults.size();
+        highlightCurrentMatch();
+    }
+
+    private static void findPrevious() {
+        if (searchResults.isEmpty()) return;
+        
+        currentSearchIndex = (currentSearchIndex - 1 + searchResults.size()) % searchResults.size();
+        highlightCurrentMatch();
+    }
+
+    private static void highlightCurrentMatch() {
+        if (currentSearchIndex >= 0 && currentSearchIndex < searchResults.size()) {
+            int start = searchResults.get(currentSearchIndex);
+            int end = start + searchField.getText().length();
+            fileContentArea.setCaretPosition(start);
+            fileContentArea.select(start, end);
+            
+            // Ensure the selection is visible
+            try {
+                Rectangle rect = fileContentArea.modelToView(start);
+                if (rect != null) {
+                    fileContentArea.scrollRectToVisible(rect);
+                }
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Error scrolling to match", e);
+            }
+        }
+    }
+
+    private static void updateSearchUI() {
+        boolean hasResults = !searchResults.isEmpty();
+        prevButton.setEnabled(hasResults);
+        nextButton.setEnabled(hasResults);
+        matchCountLabel.setText(hasResults ? 
+            (currentSearchIndex + 1) + "/" + searchResults.size() : 
+            "0/0");
     }
 }

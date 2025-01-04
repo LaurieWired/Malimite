@@ -27,7 +27,8 @@ public class GhidraProject {
     private Config config;
     private String scriptPath;
     private SQLiteDBHandler dbHandler;
-    private static final int PORT = 8765;
+    private static final int BASE_PORT = 8765;
+    private static final int MAX_PORT_ATTEMPTS = 10;
     private Consumer<String> consoleOutputCallback;
 
     public GhidraProject(String infoPlistBundleExecutable, String executableFilePath, Config config, SQLiteDBHandler dbHandler, Consumer<String> consoleOutputCallback) {
@@ -45,7 +46,27 @@ public class GhidraProject {
 
     public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho) {
         LOGGER.info("Starting Ghidra decompilation for: " + executableFilePath);
-        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+        
+        // Try ports until we find an available one
+        ServerSocket serverSocket = null;
+        int port = BASE_PORT;
+        int attempts = 0;
+        
+        while (attempts < MAX_PORT_ATTEMPTS && serverSocket == null) {
+            try {
+                serverSocket = new ServerSocket(port);
+                LOGGER.info("Successfully bound to port " + port);
+            } catch (IOException e) {
+                LOGGER.warning("Port " + port + " is in use, trying next port");
+                port++;
+                attempts++;
+                if (attempts >= MAX_PORT_ATTEMPTS) {
+                    throw new RuntimeException("Unable to find available port after " + MAX_PORT_ATTEMPTS + " attempts");
+                }
+            }
+        }
+
+        try (ServerSocket finalServerSocket = serverSocket) {  // Ensure socket gets closed
             String analyzeHeadless = getAnalyzeHeadlessPath();
             
             // Get active libraries and join them with commas
@@ -62,8 +83,13 @@ public class GhidraProject {
                 scriptPath,
                 "-postScript",
                 "DumpClassData.java",
-                String.valueOf(PORT),
-                librariesArg,  // Add libraries as second argument
+                String.valueOf(port),  // Use the port we found
+                librariesArg,
+                "-enableAnalyzer", "Objective-C",
+                "-enableAnalyzer", "String Extraction",
+                "-disableAnalyzer", "Decompiler Parameter ID",
+                "-disableAnalyzer", "DWARF",
+                "-skipAnalysisPrompt",
                 "-deleteProject"
             );
             
@@ -89,7 +115,7 @@ public class GhidraProject {
             outputThread.start();
 
             LOGGER.info("Starting Ghidra headless analyzer with command: " + String.join(" ", builder.command()));
-            LOGGER.info("Waiting for Ghidra script connection on port " + PORT);
+            LOGGER.info("Waiting for Ghidra script connection on port " + port);
             
             Socket socket = serverSocket.accept();
             socket.setSoTimeout(60000); // 1 minute timeout for heartbeat

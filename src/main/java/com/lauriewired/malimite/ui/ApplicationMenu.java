@@ -123,6 +123,13 @@ public class ApplicationMenu {
         JMenu windowsMenu = new JMenu("Windows");
         windowsMenu.setMnemonic(KeyEvent.VK_W);
 
+        addMenuItem(windowsMenu, "Search", e -> {
+            AnalysisWindow.toggleSearchPanel();
+        },
+            KeyStroke.getKeyStroke(KeyEvent.VK_F, 
+                config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
+        );
+
         addMenuItem(windowsMenu, "Right Panel", e -> {
             System.out.println("Right Panel toggle clicked");
             AnalysisWindow.toggleRightPanel();
