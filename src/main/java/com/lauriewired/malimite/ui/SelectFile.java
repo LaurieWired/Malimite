@@ -34,6 +34,7 @@ public class SelectFile {
     private static final Logger LOGGER = Logger.getLogger(SelectFile.class.getName());
     
     private static class FileTab extends JPanel {
+        private boolean active = false;
         private final String filePath;
         private final JLabel nameLabel;
         private final JLabel closeButton;
@@ -68,6 +69,16 @@ public class SelectFile {
                     }
                     setActiveFile(filePath);
                 }
+
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    setHovered(true);
+                }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    setHovered(false);
+                }
             });
             
             closeButton.addMouseListener(new MouseAdapter() {
@@ -79,6 +90,8 @@ public class SelectFile {
         }
         
         public void setActive(boolean active) {
+            this.active = active;
+            setHovered(active);
             if (active) {
                 setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createMatteBorder(0, 0, 2, 0, Color.GRAY),
@@ -87,6 +100,11 @@ public class SelectFile {
             } else {
                 setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
             }
+        }
+
+        public void setHovered(boolean hovered) {
+            nameLabel.setForeground(hovered || active ? Color.WHITE : new Color(187, 187, 187));
+            closeButton.setForeground(hovered || active ? Color.WHITE : new Color(187, 187, 187));
         }
     }
     
