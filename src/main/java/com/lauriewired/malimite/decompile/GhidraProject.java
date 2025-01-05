@@ -44,7 +44,7 @@ public class GhidraProject {
         LOGGER.info("Script path: " + scriptPath);
     }
 
-    public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho) {
+    public void decompileMacho(String executableFilePath, String projectDirectoryPath, Macho targetMacho, boolean dynamicFile) {
         LOGGER.info("Starting Ghidra decompilation for: " + executableFilePath);
         
         // Try ports until we find an available one

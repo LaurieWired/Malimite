@@ -42,26 +42,30 @@ public class SQLiteDBHandler {
         String sqlClasses = "CREATE TABLE IF NOT EXISTS Classes ("
                 + "ClassName TEXT PRIMARY KEY,"
                 + "ClassFileName TEXT,"
-                + "Functions TEXT);";  // Removed DecompilationCode from Classes
+                + "Functions TEXT,"
+                + "ExecutableName TEXT);";
 
         String sqlFunctions = "CREATE TABLE IF NOT EXISTS Functions ("
                 + "FunctionName TEXT,"
                 + "ParentClass TEXT,"
                 + "DecompilationCode TEXT,"
-                + "PRIMARY KEY (FunctionName, ParentClass));";  // Composite key to allow same function name in different classes
+                + "ExecutableName TEXT,"
+                + "PRIMARY KEY (FunctionName, ParentClass));";
 
         String sqlMachoStrings = "CREATE TABLE IF NOT EXISTS MachoStrings ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "address TEXT,"
                 + "value TEXT,"
                 + "segment TEXT,"
-                + "label TEXT);";
+                + "label TEXT,"
+                + "ExecutableName TEXT);";
 
         String sqlResourceStrings = "CREATE TABLE IF NOT EXISTS ResourceStrings ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 + "resourceId TEXT,"
                 + "value TEXT,"
-                + "type TEXT);";
+                + "type TEXT,"
+                + "ExecutableName TEXT);";
 
         String sqlFunctionReferences = "CREATE TABLE IF NOT EXISTS FunctionReferences ("
             + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -70,6 +74,7 @@ public class SQLiteDBHandler {
             + "targetFunction TEXT,"
             + "targetClass TEXT,"
             + "lineNumber INTEGER,"
+            + "ExecutableName TEXT,"
             + "FOREIGN KEY(sourceFunction, sourceClass) REFERENCES Functions(FunctionName, ParentClass),"
             + "FOREIGN KEY(targetFunction, targetClass) REFERENCES Functions(FunctionName, ParentClass)"
             + ");";
@@ -80,6 +85,7 @@ public class SQLiteDBHandler {
             + "containingFunction TEXT,"
             + "containingClass TEXT,"
             + "lineNumber INTEGER,"
+            + "ExecutableName TEXT,"
             + "FOREIGN KEY(containingFunction, containingClass) REFERENCES Functions(FunctionName, ParentClass)"
             + ");";
 
@@ -90,6 +96,7 @@ public class SQLiteDBHandler {
             + "functionName TEXT,"
             + "className TEXT,"
             + "lineNumber INTEGER,"
+            + "ExecutableName TEXT,"
             + "FOREIGN KEY(functionName, className) REFERENCES Functions(FunctionName, ParentClass)"
             + ");";
 

@@ -63,6 +63,7 @@ import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import com.lauriewired.malimite.configuration.Config;
+import com.lauriewired.malimite.decompile.DynamicDecompile;
 import com.lauriewired.malimite.configuration.Project;
 import com.lauriewired.malimite.database.SQLiteDBHandler;
 import com.lauriewired.malimite.decompile.GhidraProject;
@@ -297,12 +298,35 @@ public class AnalysisWindow {
             private void handlePopupTrigger(MouseEvent e) {
                 if (e.isPopupTrigger()) {
                     TreePath path = fileTree.getPathForLocation(e.getX(), e.getY());
-                    if (path != null && isInClassesTree(path) && path.getPathCount() == 4) {
-                        JPopupMenu popup = new JPopupMenu();
-                        JMenuItem editItem = new JMenuItem("Edit function");
-                        editItem.addActionListener(ev -> startEditing(path));
-                        popup.add(editItem);
-                        popup.show(fileTree, e.getX(), e.getY());
+                    if (path != null) {
+                        // Existing code for function editing
+                        if (isInClassesTree(path) && path.getPathCount() == 4) {
+                            JPopupMenu popup = new JPopupMenu();
+                            JMenuItem editItem = new JMenuItem("Edit function");
+                            editItem.addActionListener(ev -> startEditing(path));
+                            popup.add(editItem);
+                            popup.show(fileTree, e.getX(), e.getY());
+                        }
+                        // New code for file decompilation
+                        else if (path.getLastPathComponent() != null) {
+                            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+                            if (node.isLeaf()) {
+                                JPopupMenu popup = new JPopupMenu();
+                                JMenuItem decompileItem = new JMenuItem("Decompile");
+                                decompileItem.addActionListener(ev -> {
+                                    // Build the path key the same way it was stored
+                                    String pathKey = NodeOperations.buildFullPathFromNode(node);
+                                    String entryPath = fileEntriesMap.get(pathKey);
+                                    System.out.println("pathKey: " + pathKey);
+                                    System.out.println("entryPath: " + entryPath);
+                                    if (entryPath != null) {
+                                        DynamicDecompile.decompileFile(currentFilePath, projectDirectoryPath, entryPath, config, dbHandler, infoPlist.getExecutableName());
+                                    }
+                                });
+                                popup.add(decompileItem);
+                                popup.show(fileTree, e.getX(), e.getY());
+                            }
+                        }
                     }
                 }
             }
@@ -1013,7 +1037,7 @@ public class AnalysisWindow {
 
                 publish("Opening project...");
                 FileProcessing.openProject(currentFilePath, projectDirectoryPath, 
-                    infoPlist.getExecutableName(), config.getConfigDirectory());
+                    infoPlist.getExecutableName(), config.getConfigDirectory(), false);
 
                 executableFilePath = projectDirectoryPath + File.separator + infoPlist.getExecutableName();
                 LOGGER.info("Loading Mach-O file: " + executableFilePath);
@@ -1079,7 +1103,7 @@ public class AnalysisWindow {
                             consoleOutput.setCaretPosition(consoleOutput.getDocument().getLength());
                         }));
                 
-                    ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, projectMacho);
+                    ghidraProject.decompileMacho(executableFilePath, projectDirectoryPath, projectMacho, false);
                 } else {
                     publish("Loading existing database...");
                     dbHandler = new SQLiteDBHandler(projectDirectoryPath + File.separator, 

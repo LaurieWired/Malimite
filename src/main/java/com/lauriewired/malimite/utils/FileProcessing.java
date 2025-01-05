@@ -135,11 +135,11 @@ public class FileProcessing {
      * Creates a new malimite project if it doesn't exist
      * Otherwise, reopens an existing project
      */
-    public static void openProject(String filePath, String projectDirectoryPath, String executableName, String configDir) {
+    public static void openProject(String filePath, String projectDirectoryPath, String executableName, String configDir, boolean avoidReopen) {
         // Create malimite project directory
         File projectDirectory = new File(projectDirectoryPath);
-        if (!projectDirectory.exists()) {
-            if (projectDirectory.mkdir()) {
+        if (!projectDirectory.exists() || avoidReopen) {
+            if (projectDirectory.mkdir() || projectDirectory.exists()) {
                 LOGGER.info("Created project directory: " + projectDirectoryPath);
                 
                 // Create and save initial project configuration
