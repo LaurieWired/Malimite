@@ -131,7 +131,6 @@ public class ApplicationMenu {
         );
 
         addMenuItem(windowsMenu, "Right Panel", e -> {
-            System.out.println("Right Panel toggle clicked");
             AnalysisWindow.toggleRightPanel();
         },
             KeyStroke.getKeyStroke(KeyEvent.VK_L, config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
@@ -142,11 +141,12 @@ public class ApplicationMenu {
         addMenuItem(windowsMenu, "Xrefs", e -> {
             String className = AnalysisWindow.getCurrentClassName();
             String functionName = AnalysisWindow.getCurrentFunctionName();
+            String executableName = AnalysisWindow.getCurrentExecutableName();
             SQLiteDBHandler dbHandler = AnalysisWindow.getDbHandler();
             RSyntaxTextArea textArea = AnalysisWindow.getFileContentArea();
             
             if (className != null && dbHandler != null && textArea != null) {
-                ReferenceHandler.handleReferenceRequest(textArea, parentFrame, className, dbHandler, functionName);
+                ReferenceHandler.handleReferenceRequest(textArea, parentFrame, className, dbHandler, functionName, executableName);
             }
         },
             KeyStroke.getKeyStroke(KeyEvent.VK_X, KeyEvent.CTRL_DOWN_MASK)

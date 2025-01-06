@@ -223,7 +223,9 @@ public class GhidraProject {
                         if (consoleOutputCallback != null) {
                             consoleOutputCallback.accept(message);
                         }
-                        dbHandler.updateFunctionDecompilation(functionName, className, decompiledCode);
+                        
+                        // Store function decompilation with the correct class name and executable name
+                        dbHandler.updateFunctionDecompilation(functionName, className, decompiledCode, targetMacho.getMachoExecutableName());
                         
                         // Add to class functions map
                         classToFunctions.computeIfAbsent(className, k -> new JSONArray())
@@ -241,7 +243,7 @@ public class GhidraProject {
                         // Store the mapping of original class name to "Libraries"
                         classNameMapping.put(className, "Libraries");
                         
-                        dbHandler.updateFunctionDecompilation(libraryFunctionName, "Libraries", null);
+                        dbHandler.updateFunctionDecompilation(libraryFunctionName, "Libraries", targetMacho.getMachoExecutableName(), targetMacho.getMachoExecutableName());
                         
                         // Add to class functions map under "Libraries"
                         classToFunctions.computeIfAbsent("Libraries", k -> new JSONArray())
@@ -254,7 +256,7 @@ public class GhidraProject {
                     String className = entry.getKey();
                     JSONArray functions = entry.getValue();
                     LOGGER.info("Inserting class: " + className + " with " + functions.length() + " functions");
-                    dbHandler.insertClass(className, functions.toString());
+                    dbHandler.insertClass(className, functions.toString(), targetMacho.getMachoExecutableName());
                 }
 
                 // Add this new section to process strings
@@ -275,7 +277,7 @@ public class GhidraProject {
                     String segment = stringObj.getString("segment");
                     String label = stringObj.getString("label");
                     LOGGER.info("Inserting string: " + value + " at address: " + address);
-                    dbHandler.insertMachoString(address, value, segment, label);
+                    dbHandler.insertMachoString(address, value, segment, label, targetMacho.getMachoExecutableName());
                 }
 
                 LOGGER.info("Finished processing all data");

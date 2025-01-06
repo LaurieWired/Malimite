@@ -38,6 +38,7 @@ public class Macho {
         this.machoExecutablePath = machoExecutablePath;
         this.outputDirectoryPath = outputDirectoryPath;
         this.machoExecutableName = machoExecutableName;
+
         processMacho();
     }
 

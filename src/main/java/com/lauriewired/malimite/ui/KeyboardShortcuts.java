@@ -48,8 +48,9 @@ public class KeyboardShortcuts {
                 ReferencesDialog.show(parentFrame, 
                     AnalysisWindow.getDbHandler(), 
                     selectedText.trim(), 
-                    currentClassName,
-                    AnalysisWindow.getCurrentFunctionName());
+                    AnalysisWindow.getCurrentClassName(),
+                    AnalysisWindow.getCurrentFunctionName(),
+                    AnalysisWindow.getCurrentExecutableName());
             }
         }
     }

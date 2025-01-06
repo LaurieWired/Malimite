@@ -19,9 +19,11 @@ public class SyntaxParser {
     private String currentFunction;
     private String currentClass;
     private String formattedCode;
+    private String executableName;
 
-    public SyntaxParser(SQLiteDBHandler dbHandler) {
+    public SyntaxParser(SQLiteDBHandler dbHandler, String executableName) {
         this.dbHandler = dbHandler;
+        this.executableName = executableName;
         lexer.removeErrorListeners();
         parser.removeErrorListeners();
     }
@@ -74,8 +76,6 @@ public class SyntaxParser {
     }
 
     private class CrossReferenceVisitor extends CPP14ParserBaseVisitor<Void> {
-        private int commentLineAdjustment = 0;
-
         @Override
         public Void visitPostfixExpression(CPP14Parser.PostfixExpressionContext ctx) {
             // Only handle function calls
@@ -99,7 +99,8 @@ public class SyntaxParser {
                     currentClass,
                     calledFunction,
                     calledClass != null ? calledClass : "Unknown",
-                    actualLine
+                    actualLine,
+                    executableName
                 );
             }
             return visitChildren(ctx);
@@ -140,7 +141,8 @@ public class SyntaxParser {
                             variableType,
                             currentFunction,
                             currentClass,
-                            actualLine
+                            actualLine,
+                            executableName
                         );
 
                         // Store initial local variable reference
@@ -148,7 +150,8 @@ public class SyntaxParser {
                             variableName,
                             currentFunction,
                             currentClass,
-                            actualLine
+                            actualLine,
+                            executableName
                         );
                     }
                 }
@@ -174,7 +177,8 @@ public class SyntaxParser {
                     currentClass,
                     null,  // No specific function
                     referencedClass,
-                    actualLine
+                    actualLine,
+                    executableName
                 );
             } 
             // Handle local variable references
@@ -185,7 +189,8 @@ public class SyntaxParser {
                         identifier,
                         currentFunction,
                         currentClass,
-                        actualLine
+                        actualLine,
+                        executableName
                     );
                 }
             }

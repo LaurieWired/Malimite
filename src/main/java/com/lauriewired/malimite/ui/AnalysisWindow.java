@@ -246,11 +246,11 @@ public class AnalysisWindow {
                     DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
         
                     // Add this block to update currentClassName when clicking on a class node
-                    if (isInClassesTree(path)) {
-                        if (path.getPathCount() == 3) { // Class node
+                    if (isInClassesOrDecompiledTree(path)) {
+                        if (isInClassesTree(path) && path.getPathCount() == 3 || isInDecompiledTree(path) && path.getPathCount() == 4) { // Class node
                             currentClassName = node.getUserObject().toString();
                             LOGGER.info("Selected class: " + currentClassName);
-                        } else if (path.getPathCount() == 4) { // Function node
+                        } else if (isInClassesTree(path) && path.getPathCount() == 4 || isInDecompiledTree(path) && path.getPathCount() == 5) { // Function node
                             DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) node.getParent();
                             currentClassName = parentNode.getUserObject().toString();
                             LOGGER.info("Selected class (from function): " + currentClassName);
@@ -283,7 +283,7 @@ public class AnalysisWindow {
                                 // Check if the file is already open
                                 if (SelectFile.isFileOpen(path)) {
                                     SelectFile.handleNodeClick(path);
-                                } else if (node.isLeaf() || isInClassesTree(path)) {
+                                } else if (node.isLeaf() || isInClassesOrDecompiledTree(path)) {
                                     SelectFile.replaceActiveFile(path);
                                 }
                                 clickTimer.stop();
@@ -300,7 +300,7 @@ public class AnalysisWindow {
                     TreePath path = fileTree.getPathForLocation(e.getX(), e.getY());
                     if (path != null) {
                         // Existing code for function editing
-                        if (isInClassesTree(path) && path.getPathCount() == 4) {
+                        if (isInClassesOrDecompiledTree(path) && path.getPathCount() == 4) {
                             JPopupMenu popup = new JPopupMenu();
                             JMenuItem editItem = new JMenuItem("Edit function");
                             editItem.addActionListener(ev -> startEditing(path));
@@ -317,10 +317,8 @@ public class AnalysisWindow {
                                     // Build the path key the same way it was stored
                                     String pathKey = NodeOperations.buildFullPathFromNode(node);
                                     String entryPath = fileEntriesMap.get(pathKey);
-                                    System.out.println("pathKey: " + pathKey);
-                                    System.out.println("entryPath: " + entryPath);
                                     if (entryPath != null) {
-                                        DynamicDecompile.decompileFile(currentFilePath, projectDirectoryPath, entryPath, config, dbHandler, infoPlist.getExecutableName());
+                                        DynamicDecompile.decompileFile(currentFilePath, projectDirectoryPath, entryPath, config, dbHandler, infoPlist.getExecutableName(), treeModel, fileTree);
                                     }
                                 });
                                 popup.add(decompileItem);
@@ -510,9 +508,11 @@ public class AnalysisWindow {
             // Build the complete prompt
             StringBuilder fullPrompt = new StringBuilder(AIBackend.getDefaultPrompt());
             fullPrompt.append("\n\nHere are the functions to translate:\n\n");
+
+            String executableName = getExecutableNameForSelectedNode(fileTree.getSelectionPath());
             
             for (String functionName : selectedFunctions) {
-                String decompilation = dbHandler.getFunctionDecompilation(functionName, className);
+                String decompilation = dbHandler.getFunctionDecompilation(functionName, className, executableName);
                 if (decompilation != null && !decompilation.isEmpty()) {
                     fullPrompt.append("// Function: ").append(functionName).append("\n");
                     fullPrompt.append(decompilation).append("\n\n");
@@ -749,6 +749,9 @@ public class AnalysisWindow {
             
             displaySelectedFileContent(new TreeSelectionEvent(fileTree, infoPath, false, null, null));
         }
+
+        // Repopulate the "Decompiled" node
+        DynamicDecompile.repopulateDecompiledNode(treeModel, dbHandler, infoPlist.getExecutableName());
     }
 
     private static void loadDirectoryToTree(File directory, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
@@ -1303,6 +1306,19 @@ public class AnalysisWindow {
         }
     }
 
+    private static String getExecutableNameForSelectedNode(TreePath path) {
+        if (isInClassesTree(path) || isInFilesTree(path)) {
+            // If the node is part of the Classes tree, use the executable name from infoPlist
+            return infoPlist.getExecutableName();
+        } else if (isInDecompiledTree(path)) {
+            // If the node is part of the Decompiled tree, use the name of the child node
+            DefaultMutableTreeNode decompiledNode = (DefaultMutableTreeNode) path.getPathComponent(2);
+            return decompiledNode.getUserObject().toString();
+        }
+        
+        return null; // Return null or handle the case where the executable name is not found
+    }
+
     private static void displaySelectedFileContent(TreeSelectionEvent e) {
         // Don't change content if we're currently editing
         if (isEditing) {
@@ -1311,23 +1327,29 @@ public class AnalysisWindow {
 
         TreePath path = e.getPath();
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        
+        String executableName = getExecutableNameForSelectedNode(path);
+        if (executableName == null) {
+            LOGGER.warning("Executable name could not be determined for the selected node.");
+            return;
+        }
     
         // Check if we're in the Classes root
-        if (isInClassesTree(path)) {
+        if (isInClassesOrDecompiledTree(path)) {
             fileContentArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_CPLUSPLUS);
             
             // If this is a class node (direct child of "Classes" node)
-            if (path.getPathCount() == 3) {
+            if ((isInClassesTree(path) && path.getPathCount() == 3) || (isInDecompiledTree(path) && path.getPathCount() == 4)) {
                 String className = node.getUserObject().toString();
-                displayClassDecompilation(className);
+                displayClassDecompilation(className, executableName);
                 return;
             }
             // If this is a function node (grandchild of "Classes" node)
-            else if (path.getPathCount() == 4) {
+            else if ((isInClassesTree(path) && path.getPathCount() == 4) || (isInDecompiledTree(path) && path.getPathCount() == 5)) {
                 DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) node.getParent();
                 String className = parentNode.getUserObject().toString();
                 String functionName = node.getUserObject().toString();
-                displayFunctionDecompilation(functionName, className);
+                displayFunctionDecompilation(functionName, className, executableName);
                 return;
             }
         }
@@ -1390,12 +1412,12 @@ public class AnalysisWindow {
         }
     }
 
-    private static void displayFunctionDecompilation(String functionName, String className) {
+    private static void displayFunctionDecompilation(String functionName, String className, String executableName) {
         try {
             // Update the function list in the function assist panel
             FileProcessing.updateFunctionList(functionAssistPanel, dbHandler, className);
             
-            String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className);
+            String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className, executableName);
             if (functionDecompilation != null && !functionDecompilation.isEmpty()) {
                 // Only add headers if they don't already exist
                 String content = functionDecompilation;
@@ -1418,7 +1440,7 @@ public class AnalysisWindow {
         }
     }
 
-    private static void displayClassDecompilation(String className) {
+    private static void displayClassDecompilation(String className, String executableName) {
         try {
             // Update the function list in the function assist panel
             FileProcessing.updateFunctionList(functionAssistPanel, dbHandler, className);
@@ -1436,13 +1458,13 @@ public class AnalysisWindow {
             StringBuilder fullDecompilation = new StringBuilder();
             
             // Only add class header if it's not already present
-            String firstFunction = dbHandler.getFunctionDecompilation(functions.get(0), className);
+            String firstFunction = dbHandler.getFunctionDecompilation(functions.get(0), className, executableName);
             if (firstFunction == null || !firstFunction.trim().startsWith("// Class:")) {
                 fullDecompilation.append("// Class: ").append(className).append("\n\n");
             }
 
             for (String functionName : functions) {
-                String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className);
+                String functionDecompilation = dbHandler.getFunctionDecompilation(functionName, className, executableName);
                 if (functionDecompilation != null && !functionDecompilation.isEmpty()) {
                     // Only add function header if it's not already present
                     if (!functionDecompilation.trim().startsWith("// Class:") && !functionDecompilation.trim().startsWith("// Function:")) {
@@ -1688,9 +1710,12 @@ public class AnalysisWindow {
                         newCode = contentBuilder.toString();
                     }
 
+                    // Get the executable name for the selected node
+                    String executableName = getExecutableNameForSelectedNode(fileTree.getSelectionPath());
+
                     // Update database and verify
-                    dbHandler.updateFunctionDecompilation(functionName, className, newCode);
-                    String verifyUpdate = dbHandler.getFunctionDecompilation(functionName, className);
+                    dbHandler.updateFunctionDecompilation(functionName, className, newCode, executableName);
+                    String verifyUpdate = dbHandler.getFunctionDecompilation(functionName, className, executableName);
                     if (verifyUpdate != null && verifyUpdate.equals(newCode)) {
                         anyUpdates = true;
                     } else {
@@ -1702,14 +1727,31 @@ public class AnalysisWindow {
 
             // Refresh display if any updates were made
             if (anyUpdates) {
-                SwingUtilities.invokeLater(() -> displayClassDecompilation(className));
+                // Get the executable name for the selected node
+                String executableName = getExecutableNameForSelectedNode(fileTree.getSelectionPath());
+                SwingUtilities.invokeLater(() -> displayClassDecompilation(className, executableName));
             }
         }
     }
 
+    private static boolean isInClassesOrDecompiledTree(TreePath path) {
+        return isInClassesTree(path) || isInDecompiledTree(path);
+    }
+
+
     private static boolean isInClassesTree(TreePath path) {
         return path.getPathCount() > 1 && 
                ((DefaultMutableTreeNode) path.getPathComponent(1)).getUserObject().toString().equals("Classes");
+    }
+
+    private static boolean isInFilesTree(TreePath path) {
+        return path.getPathCount() > 1 && 
+               ((DefaultMutableTreeNode) path.getPathComponent(1)).getUserObject().toString().equals("Files");
+    }
+
+    private static boolean isInDecompiledTree(TreePath path) {
+        return path.getPathCount() > 1 && 
+                ((DefaultMutableTreeNode) path.getPathComponent(1)).getUserObject().toString().equals("Decompiled");
     }
 
     public static void startEditing(TreePath path) {
@@ -1736,7 +1778,7 @@ public class AnalysisWindow {
         String newCode = fileContentArea.getText();
 
         // Update the database
-        dbHandler.updateFunctionDecompilation(functionName, className, newCode);
+        dbHandler.updateFunctionDecompilation(functionName, className, newCode, projectMacho.getMachoExecutableName());
 
         // Reset editing state
         fileContentArea.setEditable(false);
@@ -1744,7 +1786,8 @@ public class AnalysisWindow {
         isEditing = false;
 
         // Refresh the display
-        displayFunctionDecompilation(functionName, className);
+        String executableName = getExecutableNameForSelectedNode(fileTree.getSelectionPath());
+        displayFunctionDecompilation(functionName, className, executableName);
     }
 
     public static Project getCurrentProject() {
@@ -1994,13 +2037,15 @@ public class AnalysisWindow {
                 if (parts.length >= 2) {
                     String className = parts[1];
                     String functionName = parts.length == 3 ? parts[2] : null;
+
+                    String executableName = getExecutableNameForSelectedNode(fileTree.getSelectionPath());
                     
                     // If it's a function, display just that function
                     if (functionName != null) {
-                        displayFunctionDecompilation(functionName, className);
+                        displayFunctionDecompilation(functionName, className, executableName);
                     } else {
                         // If it's a class, display the whole class
-                        displayClassDecompilation(className);
+                        displayClassDecompilation(className, executableName);
                     }
                     
                     // Find the node for tree selection
@@ -2352,5 +2397,37 @@ public class AnalysisWindow {
         matchCountLabel.setText(hasResults ? 
             (currentSearchIndex + 1) + "/" + searchResults.size() : 
             "0/0");
+    }
+
+    private static void setupTreeSelectionListener() {
+        fileTree.addTreeSelectionListener((TreeSelectionEvent e) -> {
+            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) fileTree.getLastSelectedPathComponent();
+            if (selectedNode == null) return;
+
+            // Check if the selected node is a function under "Classes" or "Decompiled"
+            if (selectedNode.getLevel() == 3) { // Assuming level 3 is where functions are
+                DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) selectedNode.getParent();
+                DefaultMutableTreeNode grandParentNode = (DefaultMutableTreeNode) parentNode.getParent();
+                
+                String parentName = parentNode.getUserObject().toString();
+                String grandParentName = grandParentNode.getUserObject().toString();
+                
+                if ("Classes".equals(grandParentName) || "Decompiled".equals(grandParentName)) {
+                    String functionName = selectedNode.getUserObject().toString();
+                    String className = parentName;
+                    String executableName = grandParentName.equals("Decompiled") ? grandParentNode.getUserObject().toString() : null;
+                    
+                    displayFunctionDecompilation(functionName, className, executableName);
+                }
+            }
+        });
+    }
+
+    public static String getCurrentExecutableName() {
+        TreePath path = fileTree.getSelectionPath();
+        if (path != null) {
+            return getExecutableNameForSelectedNode(path);
+        }
+        return null;
     }
 }

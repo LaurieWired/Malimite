@@ -12,18 +12,18 @@ import com.lauriewired.malimite.database.SQLiteDBHandler;
 public class ReferenceHandler {
     private static final Pattern IDENTIFIER_PATTERN = Pattern.compile("[a-zA-Z_$][a-zA-Z0-9_$]*");
 
-    public static void attachTo(RSyntaxTextArea textArea, JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName) {
+    public static void attachTo(RSyntaxTextArea textArea, JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName, String executableName) {
         textArea.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
                 if (e.getKeyChar() == 'x' || e.getKeyChar() == 'X') {
-                    handleReferenceRequest(textArea, parent, className, dbHandler, functionName);
+                    handleReferenceRequest(textArea, parent, className, dbHandler, functionName, executableName);
                 }
             }
         });
     }
 
-    public static void handleReferenceRequest(RSyntaxTextArea textArea, JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName) {
+    public static void handleReferenceRequest(RSyntaxTextArea textArea, JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName, String executableName) {
         String selectedText = textArea.getSelectedText();
         
         if (selectedText == null || selectedText.trim().isEmpty()) {
@@ -40,12 +40,12 @@ public class ReferenceHandler {
         }
 
         // Show the references dialog
-        ReferencesDialog.show(parent, dbHandler, selectedText, className, functionName);
+        ReferencesDialog.show(parent, dbHandler, selectedText, className, functionName, executableName);
     }
 
-    public static void handleReferenceRequest(JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName) {
+    public static void handleReferenceRequest(JFrame parent, String className, SQLiteDBHandler dbHandler, String functionName, String executableName) {
         // Show the references dialog without a specific selection
-        ReferencesDialog.show(parent, dbHandler, null, className, functionName);
+        ReferencesDialog.show(parent, dbHandler, null, className, functionName, executableName);
     }
 
     private static String getWordAtCursor(RSyntaxTextArea textArea) {
