@@ -146,7 +146,7 @@ public class FileProcessing {
                 Project project = new Project();
                 project.setFileName(executableName);
                 project.setFilePath(filePath);
-                project.setFileSize(new File(filePath).length());
+                project.setSize(new File(filePath).length());
                 
                 // Save the project configuration to project.json
                 saveProjectConfig(projectDirectoryPath, project);
@@ -229,18 +229,29 @@ public class FileProcessing {
         config = configuration;
     }
 
-    public static Project updateFileInfo(File file, Macho macho) {
+    public static Project updateFileInfo(File file, Macho projectMacho) {
         Project project = new Project();
-        project.setFileName(file.getName());
         project.setFilePath(file.getAbsolutePath());
-        project.setFileSize(file.length());
+        project.setFileName(file.getName());
+        
+        // Get file size based on whether it's an archive or not
+        if (isArchiveFile(file)) {
+            project.setSize(file.length());
+        } else {
+            // For non-archives, use the Macho file size
+            if (projectMacho != null) {
+                project.setSize(projectMacho.getSize());
+            } else {
+                project.setSize(file.length());
+            }
+        }
         
         try {
             project.setIsMachO(true);
-            project.setMachoInfo(macho);
-            project.setIsSwift(macho.isSwift());
+            project.setMachoInfo(projectMacho);
+            project.setIsSwift(projectMacho.isSwift());
             
-            if (macho.isUniversalBinary()) {
+            if (projectMacho.isUniversalBinary()) {
                 project.setFileType("Universal Mach-O Binary");
             } else {
                 project.setFileType("Single Architecture Mach-O");

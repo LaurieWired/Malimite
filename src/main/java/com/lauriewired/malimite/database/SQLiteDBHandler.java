@@ -350,6 +350,7 @@ public class SQLiteDBHandler {
                 string.put("value", rs.getString("value"));
                 string.put("segment", rs.getString("segment"));
                 string.put("label", rs.getString("label"));
+                string.put("ExecutableName", rs.getString("ExecutableName"));
                 strings.add(string);
             }
         } catch (SQLException e) {

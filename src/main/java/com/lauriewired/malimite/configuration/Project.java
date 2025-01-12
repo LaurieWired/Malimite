@@ -5,12 +5,12 @@ import com.lauriewired.malimite.files.Macho;
 public class Project {
     private String fileName;
     private String filePath;
-    private long fileSize;
     private String fileType;
     private boolean isMachO;
-    private Macho machoInfo;  // Reference to Macho object if this is a Mach-O file
-    private String bundleIdentifier;  // Add this field
+    private Macho machoInfo;
+    private String bundleIdentifier;
     private boolean isSwift;
+    private long size;
     
     public Project() {
     }
@@ -21,9 +21,6 @@ public class Project {
     
     public String getFilePath() { return filePath; }
     public void setFilePath(String filePath) { this.filePath = filePath; }
-    
-    public long getFileSize() { return fileSize; }
-    public void setFileSize(long fileSize) { this.fileSize = fileSize; }
     
     public String getFileType() { return fileType; }
     public void setFileType(String fileType) { this.fileType = fileType; }
@@ -40,11 +37,14 @@ public class Project {
     public boolean isSwift() { return isSwift; }
     public void setIsSwift(boolean isSwift) { this.isSwift = isSwift; }
     
+    public long getSize() { return size; }
+    public void setSize(long size) { this.size = size; }
+    
     public String generateInfoString() {
         StringBuilder info = new StringBuilder("<html>");
         info.append("<h3>File Analysis Report</h3>");
         info.append("<p><b>File:</b> ").append(fileName).append("</p>");
-        info.append("<p><b>Size:</b> ").append(fileSize / 1024).append(" KB</p>");
+        info.append("<p><b>Size:</b> ").append(size / 1024).append(" KB</p>");
         info.append("<p><b>Type:</b> ").append(fileType).append("</p>");
         
         if (bundleIdentifier != null && !bundleIdentifier.isEmpty()) {

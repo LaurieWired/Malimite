@@ -751,6 +751,7 @@ public class AnalysisWindow {
         }
 
         // Repopulate the "Decompiled" node
+        System.out.println("LAURIE calling repopulateDecompiledNode");
         DynamicDecompile.repopulateDecompiledNode(treeModel, dbHandler, infoPlist.getExecutableName());
     }
 
@@ -1795,8 +1796,10 @@ public class AnalysisWindow {
     }
 
     // Add this new method
-    private static void populateMachoStringsPanel() {
+    public static void populateMachoStringsPanel() {
+        System.out.println("LAURIE inside Populating Mach-O Strings panel");
         if (dbHandler != null && stringsPanel != null) {
+            LOGGER.info("LAURIE Populating Mach-O Strings panel not null");
             List<Map<String, String>> machoStrings = dbHandler.getMachoStrings();
             
             StringBuilder content = new StringBuilder();
@@ -1806,20 +1809,22 @@ public class AnalysisWindow {
             content.append("<tr>");
             content.append("<th style='text-align: left; padding-right: 20px'>Value</th>");
             content.append("<th style='text-align: left; padding-right: 20px'>Segment</th>");
-            content.append("<th style='text-align: left'>Label</th>");
+            content.append("<th style='text-align: left; padding-right: 20px'>Label</th>");
+            content.append("<th style='text-align: left'>File</th>");
             content.append("</tr>");
             
             for (Map<String, String> string : machoStrings) {
                 content.append("<tr>");
                 content.append("<td style='padding-right: 20px'>").append(string.get("value")).append("</td>");
                 content.append("<td style='padding-right: 20px'>").append(string.get("segment")).append("</td>");
-                content.append("<td>").append(string.get("label")).append("</td>");
+                content.append("<td style='padding-right: 20px'>").append(string.get("label")).append("</td>");
+                content.append("<td>").append(string.get("ExecutableName")).append("</td>");
                 content.append("</tr>");
             }
             
             content.append("</table></body></html>");
             
-            // Update panel content (same as before)
+            // Update panel content
             updatePanelContent(stringsPanel, content.toString());
         }
     }
@@ -1968,24 +1973,28 @@ public class AnalysisWindow {
 
     // Helper method to reduce code duplication
     private static void updatePanelContent(JPanel panel, String content) {
-        Component[] components = panel.getComponents();
-        for (Component component : components) {
-            if (component instanceof JScrollPane) {
-                JScrollPane scrollPane = (JScrollPane) component;
-                Component view = scrollPane.getViewport().getView();
-                if (view instanceof JTextArea) {
+        SwingUtilities.invokeLater(() -> {
+            Component[] components = panel.getComponents();
+            for (Component component : components) {
+                if (component instanceof JScrollPane) {
+                    JScrollPane scrollPane = (JScrollPane) component;
                     JEditorPane editorPane = new JEditorPane();
                     editorPane.setContentType("text/html");
                     editorPane.setEditable(false);
                     editorPane.setText(content);
                     editorPane.setBackground(null);
                     editorPane.setCaretPosition(0);
-                    scrollPane.getVerticalScrollBar().setValue(0);
                     scrollPane.setViewportView(editorPane);
-                    break;
+                    scrollPane.getVerticalScrollBar().setValue(0);
+                    
+                    // Force the panel to refresh
+                    panel.revalidate();
+                    panel.repaint();
+                    scrollPane.revalidate();
+                    scrollPane.repaint();
                 }
             }
-        }
+        });
     }
 
     public static void setSyntaxStyle(String filePath) {

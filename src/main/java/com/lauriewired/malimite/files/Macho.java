@@ -260,4 +260,9 @@ public class Macho {
     public boolean isSwift() {
         return isSwift;
     }
+
+    public long getSize() {
+        File machoFile = new File(this.machoExecutablePath);
+        return machoFile.length();
+    }
 }

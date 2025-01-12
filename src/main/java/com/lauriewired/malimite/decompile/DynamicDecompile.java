@@ -1,5 +1,6 @@
 package com.lauriewired.malimite.decompile;
 
+import com.lauriewired.malimite.ui.AnalysisWindow;
 import com.lauriewired.malimite.configuration.Config;
 import com.lauriewired.malimite.database.SQLiteDBHandler;
 import com.lauriewired.malimite.files.Macho;
@@ -14,6 +15,19 @@ import java.util.HashMap;
 import java.util.Enumeration;
 import javax.swing.JTree;
 import javax.swing.tree.TreePath;
+import javax.swing.JDialog;
+import javax.swing.JPanel;
+import javax.swing.JProgressBar;
+import javax.swing.JLabel;
+import javax.swing.JTextArea;
+import javax.swing.JScrollPane;
+import javax.swing.BorderFactory;
+import javax.swing.SwingUtilities;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+import java.awt.BorderLayout;
+import java.util.logging.Level;
+import javax.swing.SwingWorker;
 
 public class DynamicDecompile {
     private static final Logger LOGGER = Logger.getLogger(DynamicDecompile.class.getName());
@@ -21,41 +35,121 @@ public class DynamicDecompile {
     public static void decompileFile(String filePath, String projectDirectoryPath, String fullFilePath, Config config, 
             SQLiteDBHandler dbHandler, String infoPlistExecutableName, DefaultTreeModel treeModel, JTree fileTree) {
                 
-        LOGGER.info("Decompiling: " + fullFilePath);
+        // Create and configure progress dialog
+        JDialog progressDialog = new JDialog((JFrame)SwingUtilities.getWindowAncestor(fileTree), "Analyzing File", false);
+        progressDialog.setAlwaysOnTop(true);
+        progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         
-        // Get the file name from the path
-        File file = new File(fullFilePath);
-        String fileName = file.getName();
+        // Add progress components
+        JProgressBar progressBar = new JProgressBar();
+        progressBar.setIndeterminate(true);
+        JLabel statusLabel = new JLabel("Analyzing file...");
         
-        // Call openProject with the necessary parameters
-        FileProcessing.openProject(
-            filePath,           // Original file path
-            projectDirectoryPath, // Project directory path
-            fileName,           // Executable name (using file name)
-            config.getConfigDirectory(),          // Config directory
-            true
-        );
+        // Add console output area
+        JTextArea consoleOutput = new JTextArea(10, 50);
+        consoleOutput.setEditable(false);
+        JScrollPane scrollPane = new JScrollPane(consoleOutput);
+        
+        // Add components to panel
+        panel.add(statusLabel, BorderLayout.NORTH);
+        panel.add(progressBar, BorderLayout.CENTER);
+        panel.add(scrollPane, BorderLayout.SOUTH);
+        
+        progressDialog.add(panel);
+        progressDialog.pack();
+        progressDialog.setLocationRelativeTo(fileTree);
 
-        String extractedMachoPath = projectDirectoryPath + File.separator + fileName;
+        // Create SwingWorker for background processing
+        SwingWorker<Void, String> worker = new SwingWorker<Void, String>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                try {
+                    publish("Starting analysis of: " + fullFilePath);
+                    LOGGER.info("Decompiling: " + fullFilePath);
+                    
+                    File file = new File(fullFilePath);
+                    String fileName = file.getName();
+                    
+                    publish("Opening project...");
+                    FileProcessing.openProject(
+                        filePath,
+                        projectDirectoryPath, 
+                        fileName,
+                        config.getConfigDirectory(),
+                        true
+                    );
 
-        Macho targetMacho = new Macho(extractedMachoPath, projectDirectoryPath, fileName);
+                    String extractedMachoPath = projectDirectoryPath + File.separator + fileName;
+                    publish("Creating Macho object...");
+                    Macho targetMacho = new Macho(extractedMachoPath, projectDirectoryPath, fileName);
 
-        GhidraProject ghidraProject = new GhidraProject(infoPlistExecutableName, extractedMachoPath, config, dbHandler, null);
-        ghidraProject.decompileMacho(extractedMachoPath, projectDirectoryPath, targetMacho, true);
+                    publish("Starting Ghidra analysis...");
+                    GhidraProject ghidraProject = new GhidraProject(
+                        infoPlistExecutableName, 
+                        extractedMachoPath, 
+                        config, 
+                        dbHandler,
+                        // Pass console output callback
+                        message -> publish(message)
+                    );
+                    
+                    ghidraProject.decompileMacho(extractedMachoPath, projectDirectoryPath, targetMacho, true);
+                    
+                    return null;
+                } catch (Exception e) {
+                    publish("Error: " + e.getMessage());
+                    throw e;
+                }
+            }
 
-        // Add and populate the "Decompiled" node
-        DefaultMutableTreeNode decompiledNode = addDecompiledNode(treeModel);
-        populateDecompiledNode(decompiledNode, dbHandler, infoPlistExecutableName);
+            @Override
+            protected void process(List<String> chunks) {
+                // Update console with new messages
+                for (String message : chunks) {
+                    consoleOutput.append(message + "\n");
+                    consoleOutput.setCaretPosition(consoleOutput.getDocument().getLength());
+                }
+            }
 
-        // Expand the "Decompiled" node two levels deep
-        TreePath decompiledPath = new TreePath(decompiledNode.getPath());
-        fileTree.expandPath(decompiledPath);
-        Enumeration<?> decompiledChildren = decompiledNode.children();
-        while (decompiledChildren.hasMoreElements()) {
-            DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) decompiledChildren.nextElement();
-            TreePath childPath = new TreePath(childNode.getPath());
-            fileTree.expandPath(childPath);
-        }
+            @Override
+            protected void done() {
+                try {
+                    get(); // Check for exceptions
+                    
+                    // Update tree on success
+                    SwingUtilities.invokeLater(() -> {
+                        DefaultMutableTreeNode decompiledNode = addDecompiledNode(treeModel);
+                        populateDecompiledNode(decompiledNode, dbHandler, infoPlistExecutableName);
+                        AnalysisWindow.populateMachoStringsPanel();
+
+                        // Expand nodes
+                        TreePath decompiledPath = new TreePath(decompiledNode.getPath());
+                        fileTree.expandPath(decompiledPath);
+                        Enumeration<?> decompiledChildren = decompiledNode.children();
+                        while (decompiledChildren.hasMoreElements()) {
+                            DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) decompiledChildren.nextElement();
+                            TreePath childPath = new TreePath(childNode.getPath());
+                            fileTree.expandPath(childPath);
+                        }
+                    });
+                    
+                } catch (Exception e) {
+                    LOGGER.log(Level.SEVERE, "Error during decompilation", e);
+                    JOptionPane.showMessageDialog(progressDialog,
+                        "Error during decompilation: " + e.getMessage(),
+                        "Decompilation Error",
+                        JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    progressDialog.dispose();
+                }
+            }
+        };
+
+        // Start the worker and show dialog
+        worker.execute();
+        progressDialog.setVisible(true);
     }
 
     private static DefaultMutableTreeNode addDecompiledNode(DefaultTreeModel treeModel) {
