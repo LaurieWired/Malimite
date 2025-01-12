@@ -130,6 +130,19 @@ public class ApplicationMenu {
                 config.isMac() ? KeyEvent.META_DOWN_MASK : KeyEvent.CTRL_DOWN_MASK)
         );
 
+        addMenuItem(windowsMenu, "Search in Code", e -> {
+            String searchTerm = JOptionPane.showInputDialog(parentFrame,
+                "Enter search term (variable, method, or class name):",
+                "Search in Code",
+                JOptionPane.PLAIN_MESSAGE);
+            
+            if (searchTerm != null && !searchTerm.trim().isEmpty()) {
+                SearchResultsDialog.show(parentFrame, AnalysisWindow.getDbHandler(), searchTerm.trim());
+            }
+        },
+            KeyStroke.getKeyStroke(KeyEvent.VK_H, KeyEvent.CTRL_DOWN_MASK)
+        );
+
         addMenuItem(windowsMenu, "Right Panel", e -> {
             AnalysisWindow.toggleRightPanel();
         },
@@ -167,7 +180,7 @@ public class ApplicationMenu {
 
         addMenuItem(helpMenu, "About", e -> 
             JOptionPane.showMessageDialog(parentFrame,
-                "Malimite - iOS Malware Analysis Tool\nVersion 1.0\n© 2024",
+                "Malimite - Apple Malware Analysis Tool\nVersion 1.0\n© 2024",
                 "About Malimite",
                 JOptionPane.INFORMATION_MESSAGE)
         );

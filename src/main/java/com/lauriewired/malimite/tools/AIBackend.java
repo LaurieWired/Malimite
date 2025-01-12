@@ -62,6 +62,44 @@ public class AIBackend {
         "Surround each translated function with \"BEGIN_FUNCTION\" at the beginning and \"END_FUNCTION\" at the end. " +
         "Keep functions in the same order as they appear in the original code.";
 
+    private static final String SUMMARIZE_PROMPT =
+        "Provide a clear and concise summary of what these functions do. " +
+        "Focus on their purpose, key functionality, and any notable patterns. " +
+        "If you think this belongs to a known library, mention it. " +
+        "Format the response in markdown.\n\n";
+
+    private static final String VULNERABILITY_PROMPT =
+        "Analyze these functions for potential security vulnerabilities and coding issues. " +
+        "Consider: memory safety, input validation, authentication bypasses, and common coding pitfalls. " +
+        "Ignore issues like readability, magic numbers, hardcoded values, and other minor issues since this is decompiled code. " +
+        "Don't provide recommendations for fixing these issues, just identify them and say how they could be exploited. " +
+        "Format the response in markdown with clear headers for each identified issue.\n\n";
+
+    public static String getPromptForAction(String action, String functionCode) {
+        StringBuilder fullPrompt = new StringBuilder();
+        
+        switch (action) {
+            case "Auto Fix":
+                Project currentProject = AnalysisWindow.getCurrentProject();
+                String targetLanguage = currentProject != null && currentProject.isSwift() ? "Swift" : "Objective-C";
+                fullPrompt.append(String.format(DEFAULT_PROMPT, targetLanguage, targetLanguage));
+                break;
+            case "Summarize":
+                fullPrompt.append(SUMMARIZE_PROMPT);
+                break;
+            case "Find Vulnerabilities":
+                fullPrompt.append(VULNERABILITY_PROMPT);
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown action: " + action);
+        }
+
+        fullPrompt.append("\nHere are the functions to analyze:\n\n");
+        fullPrompt.append(functionCode);
+        
+        return fullPrompt.toString();
+    }
+
     public static String getDefaultPrompt() {
         Project currentProject = AnalysisWindow.getCurrentProject();
         String targetLanguage = currentProject != null && currentProject.isSwift() ? "Swift" : "Objective-C";

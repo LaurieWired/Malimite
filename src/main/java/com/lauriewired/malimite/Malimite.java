@@ -201,15 +201,11 @@ public class Malimite {
                     fileName = fileName.substring(0, lastDotIndex);
                 }
                 
-                LOGGER.info("Original file path: " + originalFile.getAbsolutePath());
-                LOGGER.info("Parent directory: " + parentDir);
-                LOGGER.info("File name without extension: " + fileName);
-                
                 File projectFile = new File(parentDir + File.separator + fileName + "_malimite" + File.separator + "project.json");
-                LOGGER.info("Looking for project file at: " + projectFile.getAbsolutePath());
-                LOGGER.info("Project file exists: " + projectFile.exists());
                 
                 if (projectFile.exists()) {
+                    // Close existing window before opening new one
+                    AnalysisWindow.closeWindow();
                     LOGGER.info("Opening analysis window for: " + path);
                     AnalysisWindow.show(new File(path), config);
                 } else {
@@ -285,6 +281,8 @@ public class Malimite {
             // Proceed with existing analysis logic
             String filePath = filePathText.getText();
             if (!filePath.isEmpty() && Files.exists(Paths.get(filePath))) {
+                // Close existing window before opening new one
+                AnalysisWindow.closeWindow();
                 AnalysisWindow.show(new File(filePath), config);
             } else {
                 JOptionPane.showMessageDialog(null, 

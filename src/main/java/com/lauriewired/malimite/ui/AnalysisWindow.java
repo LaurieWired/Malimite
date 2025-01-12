@@ -88,6 +88,7 @@ import java.awt.Insets;
 import java.awt.Rectangle;
 
 import java.nio.file.Files;
+import java.awt.Desktop;
 
 public class AnalysisWindow {
     private static final Logger LOGGER = Logger.getLogger(AnalysisWindow.class.getName());
@@ -154,15 +155,44 @@ public class AnalysisWindow {
     private static int currentSearchIndex = -1;
     private static List<Integer> searchResults = new ArrayList<>();
 
-    public static void show(File file, Config config) {
-        SafeMenuAction.execute(() -> {
-            if (analysisFrame != null && analysisFrame.isVisible()) {
-                analysisFrame.toFront();
-                return;
-            }
+    // Add this as a class field at the top with other static fields
+    private static JComboBox<String> actionSelector;
 
-            AnalysisWindow.config = config;
-            analysisFrame = new JFrame("Malimite - Analysis");
+    // Add a method to properly close the window
+    public static void closeWindow() {
+        if (analysisFrame != null) {
+            analysisFrame.dispose();
+            analysisFrame = null;
+            
+            // Reset all static variables
+            fileTree = null;
+            treeModel = null;
+            fileContentArea = null;
+            fileEntriesMap.clear();
+            searchResults.clear();
+            currentSearchIndex = -1;
+            isEditing = false;
+            functionAssistVisible = false;
+            lastDividerLocation = -1;
+            currentProject = null;
+            dbHandler = null;
+            infoPlist = null;
+            projectMacho = null;
+            ghidraProject = null;
+            config = null;  // Also reset the config
+        }
+    }
+
+    public static void show(File file, Config configInstance) {
+        // Store the config instance
+        config = configInstance;
+        
+        // Close any existing window first
+        closeWindow();
+        
+        // Create new window
+        SwingUtilities.invokeLater(() -> {
+            analysisFrame = new JFrame("Analysis - " + file.getName());
             analysisFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
             analysisFrame.setSize(800, 600);
             analysisFrame.setExtendedState(JFrame.MAXIMIZED_BOTH);
@@ -457,34 +487,42 @@ public class AnalysisWindow {
             .toArray(String[]::new);
         JComboBox<String> modelSelector = new JComboBox<>(modelNames);
         
-        // Update bottom panel to include both clean button and model selector
+        // Replace the clean button creation with a combo box and button panel
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+
+        // Create action combo box
+        String[] actions = {"Auto Fix", "Summarize", "Find Vulnerabilities"};
+        actionSelector = new JComboBox<>(actions);
+
+        // Create action button (renamed from cleanButton)
+        JButton actionButton = new JButton("Execute");
+
+        actionPanel.add(actionSelector);
+        actionPanel.add(actionButton);
+
+        // Update bottom panel to include both model selector and action panel
         JPanel bottomPanel = new JPanel(new BorderLayout());
         bottomPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        
+
         JPanel modelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         modelPanel.add(new JLabel("Model:"));
         modelPanel.add(modelSelector);
-        
-        // Add this before creating the buttonPanel
-        JButton cleanButton = new JButton("Auto Fix");
-        
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        buttonPanel.add(cleanButton);
-        
+
         bottomPanel.add(modelPanel, BorderLayout.WEST);
-        bottomPanel.add(buttonPanel, BorderLayout.EAST);
-        
-        // Update clean button action listener
-        cleanButton.addActionListener(e -> {
+        bottomPanel.add(actionPanel, BorderLayout.EAST);
+
+        // Update action button listener
+        actionButton.addActionListener(e -> {
+            String selectedAction = (String) actionSelector.getSelectedItem();
             String selectedDisplayName = modelSelector.getSelectedItem().toString();
             Model selectedModel = Arrays.stream(AIBackend.getSupportedModels())
                 .filter(m -> m.getDisplayName().equals(selectedDisplayName))
                 .findFirst()
                 .orElse(AIBackend.getDefaultModel());
-            
+
             // Get selected functions from the list
             List<String> selectedFunctions = ((JList<String>) listScrollPane.getViewport().getView()).getSelectedValuesList();
-            
+
             if (selectedFunctions.isEmpty()) {
                 JOptionPane.showMessageDialog(analysisFrame,
                     "Please select at least one function to process.",
@@ -502,29 +540,31 @@ public class AnalysisWindow {
                     JOptionPane.WARNING_MESSAGE);
                 return;
             }
+
+            // Build the function code string
+            String executableName = getExecutableNameForSelectedNode(fileTree.getSelectionPath());
             DefaultMutableTreeNode classNode = (DefaultMutableTreeNode) path.getPathComponent(2);
             String className = classNode.getUserObject().toString();
 
-            // Build the complete prompt
-            StringBuilder fullPrompt = new StringBuilder(AIBackend.getDefaultPrompt());
-            fullPrompt.append("\n\nHere are the functions to translate:\n\n");
-
-            String executableName = getExecutableNameForSelectedNode(fileTree.getSelectionPath());
-            
+            StringBuilder functionCode = new StringBuilder();
             for (String functionName : selectedFunctions) {
                 String decompilation = dbHandler.getFunctionDecompilation(functionName, className, executableName);
                 if (decompilation != null && !decompilation.isEmpty()) {
-                    fullPrompt.append("// Function: ").append(functionName).append("\n");
-                    fullPrompt.append(decompilation).append("\n\n");
+                    functionCode.append("// Function: ").append(functionName).append("\n");
+                    functionCode.append(decompilation).append("\n\n");
                 }
             }
 
+            // Get the appropriate prompt from AIBackend
+            String prompt = AIBackend.getPromptForAction(selectedAction, functionCode.toString());
+
             // Create confirmation message
             String confirmMessage = String.format(
-                "<html>Sending %d function%s to %s for translation:<br><br>%s</html>",
+                "<html>Sending %d function%s to %s for %s analysis:<br><br>%s</html>",
                 selectedFunctions.size(),
                 selectedFunctions.size() == 1 ? "" : "s",
                 selectedModel.getDisplayName(),
+                selectedAction.toLowerCase(),
                 String.join(", ", selectedFunctions)
             );
 
@@ -533,7 +573,7 @@ public class AnalysisWindow {
             int choice = JOptionPane.showOptionDialog(
                 analysisFrame,
                 confirmMessage,
-                "Confirm Translation",
+                "Confirm Analysis",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.QUESTION_MESSAGE,
                 null,
@@ -542,9 +582,14 @@ public class AnalysisWindow {
             );
 
             if (choice == 0) { // Confirm was clicked
-                sendPromptToAI(selectedModel, fullPrompt.toString());
+                if (selectedAction.equals("Auto Fix")) {
+                    sendPromptToAI(selectedModel, prompt);
+                } else {
+                    // For Summarize and Find Vulnerabilities, show response in a dialog
+                    sendPromptForDialog(selectedModel, prompt, selectedAction);
+                }
             } else if (choice == 1) { // Edit Prompt was clicked
-                showPromptEditor(selectedModel, fullPrompt.toString());
+                showPromptEditor(selectedModel, prompt);
             }
         });
 
@@ -751,7 +796,6 @@ public class AnalysisWindow {
         }
 
         // Repopulate the "Decompiled" node
-        System.out.println("LAURIE calling repopulateDecompiledNode");
         DynamicDecompile.repopulateDecompiledNode(treeModel, dbHandler, infoPlist.getExecutableName());
     }
 
@@ -939,7 +983,7 @@ public class AnalysisWindow {
     }
     
     private static void populateClassesNode(DefaultMutableTreeNode classesRootNode) {
-        Map<String, List<String>> classesAndFunctions = dbHandler.getAllClassesAndFunctions();
+        Map<String, List<String>> classesAndFunctions = dbHandler.getMainExecutableClasses(infoPlist.getExecutableName());
         
         // Convert map keys to sorted list
         List<String> sortedClassNames = new ArrayList<>(classesAndFunctions.keySet());
@@ -1615,7 +1659,14 @@ public class AnalysisWindow {
             JOptionPane.PLAIN_MESSAGE);
             
         if (confirm == JOptionPane.OK_OPTION) {
-            sendPromptToAI(selectedModel, promptArea.getText());
+            // Get the current action from our stored reference
+            String selectedAction = actionSelector.getSelectedItem().toString();
+            
+            if (selectedAction.equals("Auto Fix")) {
+                sendPromptToAI(selectedModel, promptArea.getText());
+            } else {
+                sendPromptForDialog(selectedModel, promptArea.getText(), selectedAction);
+            }
         }
     }
 
@@ -1797,9 +1848,7 @@ public class AnalysisWindow {
 
     // Add this new method
     public static void populateMachoStringsPanel() {
-        System.out.println("LAURIE inside Populating Mach-O Strings panel");
         if (dbHandler != null && stringsPanel != null) {
-            LOGGER.info("LAURIE Populating Mach-O Strings panel not null");
             List<Map<String, String>> machoStrings = dbHandler.getMachoStrings();
             
             StringBuilder content = new StringBuilder();
@@ -2438,5 +2487,104 @@ public class AnalysisWindow {
             return getExecutableNameForSelectedNode(path);
         }
         return null;
+    }
+
+    // Add this new method to handle displaying AI responses in a dialog
+    private static void sendPromptForDialog(Model selectedModel, String prompt, String action) {
+        // Create a loading dialog
+        JDialog loadingDialog = new JDialog(analysisFrame, "Processing", true);
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        JProgressBar spinner = new JProgressBar();
+        spinner.setIndeterminate(true);
+        panel.add(spinner, BorderLayout.CENTER);
+        
+        JLabel statusLabel = new JLabel("Sending request to " + selectedModel.getDisplayName() + "...");
+        panel.add(statusLabel, BorderLayout.SOUTH);
+        
+        loadingDialog.add(panel);
+        loadingDialog.pack();
+        loadingDialog.setLocationRelativeTo(analysisFrame);
+        
+        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return AIBackend.sendToModel(
+                    selectedModel.getProvider(),
+                    selectedModel.getModelId(),
+                    prompt,
+                    config
+                );
+            }
+            
+            @Override
+            protected void done() {
+                loadingDialog.dispose();
+                try {
+                    String response = get();
+                    if (response != null) {
+                        // Create and show response dialog
+                        JDialog responseDialog = new JDialog(analysisFrame, action + " Results", true);
+                        responseDialog.setLayout(new BorderLayout());
+
+                        // Create editor pane with HTML support
+                        JEditorPane responsePane = new JEditorPane();
+                        responsePane.setEditable(false);
+                        responsePane.setContentType("text/html");
+                        
+                        // Convert markdown to HTML
+                        com.vladsch.flexmark.util.data.MutableDataSet options = new com.vladsch.flexmark.util.data.MutableDataSet();
+                        com.vladsch.flexmark.parser.Parser parser = com.vladsch.flexmark.parser.Parser.builder(options).build();
+                        com.vladsch.flexmark.html.HtmlRenderer renderer = com.vladsch.flexmark.html.HtmlRenderer.builder(options).build();
+                        com.vladsch.flexmark.util.ast.Node document = parser.parse(response);
+                        String html = "<html><body style='font-family: Arial, sans-serif; padding: 20px;'>" + 
+                                    renderer.render(document) + 
+                                    "</body></html>";
+                        
+                        responsePane.setText(html);
+                        responsePane.setCaretPosition(0);
+                        
+                        // Enable hyperlink support
+                        responsePane.addHyperlinkListener(e -> {
+                            if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+                                try {
+                                    Desktop.getDesktop().browse(e.getURL().toURI());
+                                } catch (Exception ex) {
+                                    LOGGER.log(Level.WARNING, "Error opening URL", ex);
+                                }
+                            }
+                        });
+                        
+                        JScrollPane scrollPane = new JScrollPane(responsePane);
+                        scrollPane.setPreferredSize(new Dimension(800, 600));
+                        
+                        // Add close button at the bottom
+                        JButton closeButton = new JButton("Close");
+                        closeButton.addActionListener(e -> responseDialog.dispose());
+                        
+                        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+                        buttonPanel.add(closeButton);
+                        
+                        responseDialog.add(scrollPane, BorderLayout.CENTER);
+                        responseDialog.add(buttonPanel, BorderLayout.SOUTH);
+                        
+                        responseDialog.pack();
+                        responseDialog.setLocationRelativeTo(analysisFrame);
+                        responseDialog.setVisible(true);
+                    }
+                } catch (Exception ex) {
+                    if (!(ex.getCause() instanceof AIBackend.ApiKeyMissingException)) {
+                        JOptionPane.showMessageDialog(analysisFrame,
+                            "Error connecting to AI model: " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }
+        };
+        
+        worker.execute();
+        loadingDialog.setVisible(true);
     }
 }

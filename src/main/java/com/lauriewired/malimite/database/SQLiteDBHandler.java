@@ -116,7 +116,7 @@ public class SQLiteDBHandler {
 
     public Map<String, List<String>> getAllClassesAndFunctions() {
         Map<String, List<String>> classFunctionMap = new HashMap<>();
-        String sql = "SELECT ClassName, Functions FROM Classes";
+        String sql = "SELECT ClassName, Functions, ExecutableName FROM Classes";
 
         try (Connection conn = DriverManager.getConnection(url);
              Statement stmt = conn.createStatement();
@@ -604,5 +604,103 @@ public class SQLiteDBHandler {
             LOGGER.log(Level.SEVERE, "Error retrieving executable name for class", e);
         }
         return null;
+    }
+
+    public List<Map<String, String>> searchCodebase(String searchTerm) {
+        List<Map<String, String>> results = new ArrayList<>();
+        String termPattern = "%" + searchTerm.toLowerCase() + "%";
+        
+        // Search in Functions
+        String sqlFunctions = "SELECT 'Function' as type, FunctionName as name, "
+                           + "ParentClass as container, ExecutableName "
+                           + "FROM Functions WHERE LOWER(FunctionName) LIKE ?";
+        
+        // Search in LocalVariableReferences
+        String sqlVariables = "SELECT 'Variable' as type, variableName as name, "
+                           + "containingFunction || ' in ' || containingClass as container, "
+                           + "ExecutableName, lineNumber "
+                           + "FROM LocalVariableReferences WHERE LOWER(variableName) LIKE ?";
+        
+        // Search in Classes
+        String sqlClasses = "SELECT 'Class' as type, ClassName as name, "
+                         + "ExecutableName as container, ExecutableName "
+                         + "FROM Classes WHERE LOWER(ClassName) LIKE ?";
+
+        try (Connection conn = DriverManager.getConnection(url)) {
+            // Search Functions
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlFunctions)) {
+                pstmt.setString(1, termPattern);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, String> result = new HashMap<>();
+                        result.put("type", rs.getString("type"));
+                        result.put("name", rs.getString("name"));
+                        result.put("container", rs.getString("container"));
+                        result.put("executable", rs.getString("ExecutableName"));
+                        result.put("line", "");
+                        results.add(result);
+                    }
+                }
+            }
+
+            // Search Variables
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlVariables)) {
+                pstmt.setString(1, termPattern);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, String> result = new HashMap<>();
+                        result.put("type", rs.getString("type"));
+                        result.put("name", rs.getString("name"));
+                        result.put("container", rs.getString("container"));
+                        result.put("executable", rs.getString("ExecutableName"));
+                        result.put("line", rs.getString("lineNumber"));
+                        results.add(result);
+                    }
+                }
+            }
+
+            // Search Classes
+            try (PreparedStatement pstmt = conn.prepareStatement(sqlClasses)) {
+                pstmt.setString(1, termPattern);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, String> result = new HashMap<>();
+                        result.put("type", rs.getString("type"));
+                        result.put("name", rs.getString("name"));
+                        result.put("container", rs.getString("container"));
+                        result.put("executable", rs.getString("ExecutableName"));
+                        result.put("line", "");
+                        results.add(result);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Error searching codebase", e);
+        }
+        
+        return results;
+    }
+
+    public Map<String, List<String>> getMainExecutableClasses(String infoPlistExecutableName) {
+        Map<String, List<String>> classFunctionMap = new HashMap<>();
+        String sql = "SELECT ClassName, Functions FROM Classes WHERE ExecutableName = ?";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, infoPlistExecutableName);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    String className = rs.getString("ClassName");
+                    String functionsJson = rs.getString("Functions");
+                    List<String> functions = parseFunctions(functionsJson);
+                    classFunctionMap.put(className, functions);
+                }
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Error getting main executable classes", e);
+        }
+        return classFunctionMap;
     }
 }
