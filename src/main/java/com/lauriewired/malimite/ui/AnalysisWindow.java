@@ -236,6 +236,9 @@ public class AnalysisWindow {
                 config
             );
             analysisFrame.setJMenuBar(applicationMenu.createMenuBar());
+
+            toggleRightPanel(); // lol this is really lazy but works. oh well.
+            toggleRightPanel();
         });
     }
 
