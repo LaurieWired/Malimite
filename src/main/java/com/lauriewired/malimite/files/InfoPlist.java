@@ -48,18 +48,25 @@ public class InfoPlist {
         }
     }
 
+    public InfoPlist() {
+        this.infoPlistBundleExecutable = "unknown";
+        this.bundleIdentifier = "unknown";
+    }
+
+    public static InfoPlist createEmpty() {
+        return new InfoPlist();
+    }
+
     /*
      * Takes in a binary or XML Info.plist and returns the CFBundleExecutable value
      */
     public static String extractCFBundleExecutable(NSObject plist) {
-        System.out.println("LAURIEEEEEE extractCFBundleExecutable");
         String infoPlistBundleExecutable = "";
 
         if (plist instanceof NSDictionary) {
             NSDictionary dict = (NSDictionary) plist;
             String executableName = dict.objectForKey("CFBundleExecutable").toString();
             infoPlistBundleExecutable = executableName;
-            System.out.println("LAURIEEEEEE extractCFBundleExecutable: " + infoPlistBundleExecutable);
         }
 
         return infoPlistBundleExecutable;

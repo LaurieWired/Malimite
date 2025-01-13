@@ -265,4 +265,20 @@ public class Macho {
         File machoFile = new File(this.machoExecutablePath);
         return machoFile.length();
     }
+
+    public Macho() {
+        this.isUniversal = false;
+        this.cpuTypes = new ArrayList<>();
+        this.cpuSubTypes = new ArrayList<>();
+        this.offsets = new ArrayList<>();
+        this.sizes = new ArrayList<>();
+        this.machoExecutablePath = "";
+        this.outputDirectoryPath = "";
+        this.machoExecutableName = "unknown";
+        this.isSwift = false;
+    }
+
+    public static Macho createEmpty() {
+        return new Macho();
+    }
 }

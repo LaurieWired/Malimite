@@ -778,6 +778,29 @@ public class AnalysisWindow {
             return;
         }
         
+        // If no Info.plist was found, create empty objects and expand Files node
+        if (infoPlist == null) {
+            LOGGER.warning("No Info.plist found, creating empty objects");
+            infoPlist = InfoPlist.createEmpty();
+            projectMacho = Macho.createEmpty();
+            updateBundleIdDisplay("unknown");
+            
+            // Get Files node (second child of root)
+            DefaultMutableTreeNode filesNode = (DefaultMutableTreeNode) ((DefaultMutableTreeNode) treeModel.getRoot()).getChildAt(1);
+            TreePath filesPath = new TreePath(treeModel.getPathToRoot(filesNode));
+            fileTree.expandPath(filesPath);
+            
+            // Select first child if available
+            if (filesNode.getChildCount() > 0) {
+                DefaultMutableTreeNode firstChild = (DefaultMutableTreeNode) filesNode.getFirstChild();
+                TreePath childPath = new TreePath(treeModel.getPathToRoot(firstChild));
+                fileTree.setSelectionPath(childPath);
+                fileTree.scrollPathToVisible(childPath);
+                SelectFile.addFile(childPath);
+                displaySelectedFileContent(new TreeSelectionEvent(fileTree, childPath, false, null, null));
+            }
+        }
+        
         // Update project info
         Project project = FileProcessing.updateFileInfo(file, projectMacho);
         config.addProjectPath(project.getFilePath());
@@ -787,7 +810,7 @@ public class AnalysisWindow {
         populateMachoStringsPanel();
         populateResourceStringsPanel();
 
-        // Select Info.plist node by default and display its content
+        // Only try to select Info.plist if it exists
         DefaultMutableTreeNode infoNode = NodeOperations.findInfoPlistNode((DefaultMutableTreeNode) treeModel.getRoot());
         if (infoNode != null) {
             TreePath infoPath = new TreePath(treeModel.getPathToRoot(infoNode));
@@ -798,8 +821,10 @@ public class AnalysisWindow {
             displaySelectedFileContent(new TreeSelectionEvent(fileTree, infoPath, false, null, null));
         }
 
-        // Repopulate the "Decompiled" node
-        DynamicDecompile.repopulateDecompiledNode(treeModel, dbHandler, infoPlist.getExecutableName());
+        // Repopulate the "Decompiled" node if we have a valid database connection
+        if (dbHandler != null) {
+            DynamicDecompile.repopulateDecompiledNode(treeModel, dbHandler, infoPlist.getExecutableName());
+        }
     }
 
     private static void loadDirectoryToTree(File directory, DefaultMutableTreeNode filesRootNode, DefaultMutableTreeNode classesRootNode) {
