@@ -180,7 +180,7 @@ public class ApplicationMenu {
 
         addMenuItem(helpMenu, "About", e -> 
             JOptionPane.showMessageDialog(parentFrame,
-                "Malimite - Apple Malware Analysis Tool\nVersion 1.0\n© 2024",
+                "Malimite - iOS and macOS Decompiler\nVersion 1.0\n© 2025",
                 "About Malimite",
                 JOptionPane.INFORMATION_MESSAGE)
         );
