@@ -8,9 +8,9 @@
 
 # Description
 
-Malimite is an iOS decompiler designed to help researchers analyze and decode IPA files.
+Malimite is an iOS and macOS decompiler designed to help researchers analyze and decode IPA files and Application Bundles.
 
-Built on top of Ghidra decompilation to offer direct support for Swift, Objective-C, and iOS resources.
+Built on top of Ghidra decompilation to offer direct support for Swift, Objective-C, and Apple resources.
 
 
 ![Malimite Features](https://github.com/LaurieWired/Malimite/blob/main/media/malimite_features_github.png)
@@ -19,7 +19,7 @@ Built on top of Ghidra decompilation to offer direct support for Swift, Objectiv
 # Features
 - Multi-Platform
   - Mac, Windows, Linux
-- Direct support for IPA files
+- Direct support for IPA and bundle files
 - Auto decodes iOS resources
 - Avoids lib code decompilation
 - Reconstructs Swift classes
@@ -44,7 +44,7 @@ For full Installation steps consult the Wiki.
 - Suggest an improvement
 - Share with others or give a star!
 
-Your contributions are greatly appreciated and will help make Malimite an even more powerful and versatile tool for the iOS Reverse Engineering community.
+Your contributions are greatly appreciated and will help make Malimite an even more powerful and versatile tool for the iOS and macOS Reverse Engineering community.
 
 # License
 
