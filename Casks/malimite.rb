@@ -4,7 +4,7 @@ cask "malimite" do
 
   url "https://github.com/LaurieWired/Malimite/releases/download/#{version}/Malimite-1-1.zip"
   name "Malimite"
-  desc "Decompiler for iOS and macOS applications"
+  desc "Decompiler for Apple applications"
   homepage "https://github.com/LaurieWired/Malimite"
 
   depends_on formula: "java"
