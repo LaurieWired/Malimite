@@ -9,33 +9,27 @@ cask "malimite" do
 
   depends_on formula: "java"
 
-  # Install files into libexec and create a wrapper script
   stage_only true
 
   postflight do
     libexec = "#{HOMEBREW_PREFIX}/libexec/malimite"
     bin = "#{HOMEBREW_PREFIX}/bin/malimite"
 
-    # Move extracted files to libexec
+    # Move all files to libexec
     FileUtils.mkdir_p libexec
     FileUtils.mv Dir["#{staged_path}/*"], libexec
 
-    # Write wrapper script
-    File.write(bin, <<~EOS)
-      #!/bin/bash
-      exec java -jar "#{libexec}/Malimite-1-1.jar" "$@"
-    EOS
-    FileUtils.chmod("+x", bin)
+    # Symlink the existing shell script to the bin directory
+    FileUtils.ln_sf "#{libexec}/malimite", bin
   end
+
+  uninstall delete: [
+    "#{HOMEBREW_PREFIX}/bin/malimite",
+    "#{HOMEBREW_PREFIX}/libexec/malimite",
+  ]
 
   caveats <<~EOS
     Ghidra is a recommended dependency for Malimite. You can install it via:
       brew install --cask ghidra
   EOS
-
-  uninstall delete: [
-    "#{HOMEBREW_PREFIX}/libexec/malimite",
-    "#{HOMEBREW_PREFIX}/bin/malimite",
-  ]
 end
-
