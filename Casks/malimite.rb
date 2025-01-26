@@ -4,7 +4,7 @@ cask "malimite" do
 
   url "https://github.com/LaurieWired/Malimite/releases/download/#{version}/Malimite-1-1.zip"
   name "Malimite"
-  desc "iOS and macOS Decompiler"
+  desc "Decompiler for iOS and macOS applications"
   homepage "https://github.com/LaurieWired/Malimite"
 
   depends_on formula: "java"
@@ -15,12 +15,14 @@ cask "malimite" do
     libexec = "#{HOMEBREW_PREFIX}/libexec/malimite"
     bin = "#{HOMEBREW_PREFIX}/bin/malimite"
 
-    # Move all files to libexec
     FileUtils.mkdir_p libexec
     FileUtils.mv Dir["#{staged_path}/*"], libexec
 
-    # Symlink the existing shell script to the bin directory
-    FileUtils.ln_sf "#{libexec}/malimite", bin
+    File.write(bin, <<~EOS)
+      #!/bin/bash
+      exec java -jar "#{libexec}/Malimite-1-1.jar" "$@"
+    EOS
+    FileUtils.chmod("+x", bin)
   end
 
   uninstall delete: [
