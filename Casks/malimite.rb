@@ -9,8 +9,6 @@ cask "malimite" do
 
   depends_on formula: "java"
 
-  stage_only true
-
   postflight do
     libexec = "#{HOMEBREW_PREFIX}/libexec/malimite"
     bin = "#{HOMEBREW_PREFIX}/bin/malimite"
@@ -28,6 +26,14 @@ cask "malimite" do
   uninstall delete: [
     "#{HOMEBREW_PREFIX}/bin/malimite",
     "#{HOMEBREW_PREFIX}/libexec/malimite",
+  ]
+
+  zap trash: [
+    "~/Library/Application Support/Malimite",
+    "~/Library/Caches/Malimite",
+    "~/Library/Logs/Malimite",
+    "~/Library/Preferences/com.lauriewired.malimite.plist",
+    "~/Library/Saved Application State/com.lauriewired.malimite.savedState",
   ]
 
   caveats <<~EOS
