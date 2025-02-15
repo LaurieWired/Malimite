@@ -23,9 +23,10 @@ import org.json.JSONTokener;
 
 import com.lauriewired.malimite.decompile.SyntaxParser;
 
-public class SQLiteDBHandler { 
+public class SQLiteDBHandler {
     private String url;
     private static final Logger LOGGER = Logger.getLogger(SQLiteDBHandler.class.getName());
+    private Connection transaction;
 
     /*
      *  SQLiteDBHandler dbHandler = new SQLiteDBHandler("mydatabase.db");
@@ -39,6 +40,16 @@ public class SQLiteDBHandler {
     }
 
     private void initializeDatabase() {
+        try {
+            Connection transaction = DriverManager.getConnection(url);
+            transaction.setAutoCommit(false);
+            this.transaction = transaction;
+        } catch (SQLException e) {
+            String msg = "Failed to create database transaction connection";
+            LOGGER.log(Level.SEVERE, msg, e);
+            throw new RuntimeException(msg, e);
+        }
+
         String sqlClasses = "CREATE TABLE IF NOT EXISTS Classes ("
                 + "ClassName TEXT,"
                 + "Functions TEXT,"
@@ -112,6 +123,10 @@ public class SQLiteDBHandler {
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Database initialization error", e);
         }
+    }
+
+    public Connection GetTransaction() {
+        return this.transaction;
     }
 
     public Map<String, List<String>> getAllClassesAndFunctions() {
@@ -239,25 +254,33 @@ public class SQLiteDBHandler {
     }
 
     public void updateFunctionDecompilation(String functionName, String className, String decompiledCode, String executableName) {
+        try (Connection conn = DriverManager.getConnection(url)) {
+            updateFunctionDecompilation(conn, functionName, className, decompiledCode, executableName);
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Error updating function decompilation", e);
+            e.printStackTrace();
+        }
+    }
+
+    public void updateFunctionDecompilation(Connection transaction, String functionName, String className, String decompiledCode, String executableName) {
         // First, clear all existing references for this function
-        clearFunctionReferences(functionName, className, executableName);
-        
+        clearFunctionReferences(transaction, functionName, className, executableName);
+
         // Update the function's decompilation code
         String sql = "UPDATE Functions SET DecompilationCode = ? "
-                   + "WHERE FunctionName = ? AND ParentClass = ? AND ExecutableName = ?";
+                + "WHERE FunctionName = ? AND ParentClass = ? AND ExecutableName = ?";
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try (PreparedStatement pstmt = transaction.prepareStatement(sql)) {
             pstmt.setString(1, decompiledCode);
             pstmt.setString(2, functionName);
             pstmt.setString(3, className);
             pstmt.setString(4, executableName);
             int rowsAffected = pstmt.executeUpdate();
-            
+
             if (rowsAffected == 0) {
                 // If no rows were updated, insert a new record
                 sql = "INSERT INTO Functions(FunctionName, ParentClass, DecompilationCode, ExecutableName) VALUES(?, ?, ?, ?)";
-                try (PreparedStatement insertStmt = conn.prepareStatement(sql)) {
+                try (PreparedStatement insertStmt = transaction.prepareStatement(sql)) {
                     insertStmt.setString(1, functionName);
                     insertStmt.setString(2, className);
                     insertStmt.setString(3, decompiledCode);
@@ -265,14 +288,16 @@ public class SQLiteDBHandler {
                     rowsAffected = insertStmt.executeUpdate();
                 }
             }
-            
+
             // Create a new SyntaxParser and reparse the updated function
             if (decompiledCode != null && !decompiledCode.trim().isEmpty()) {
                 SyntaxParser parser = new SyntaxParser(this, executableName);
                 parser.setContext(functionName, className);
                 parser.collectCrossReferences(decompiledCode);
             }
-            
+
+            transaction.commit();
+
             LOGGER.info("Database update for " + functionName + " affected " + rowsAffected + " rows");
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Error updating function decompilation", e);
@@ -280,23 +305,21 @@ public class SQLiteDBHandler {
         }
     }
 
-    private void clearFunctionReferences(String functionName, String className, String executableName) {
+    private void clearFunctionReferences(Connection transaction, String functionName, String className, String executableName) {
         String sqlFuncRefs = "DELETE FROM FunctionReferences WHERE sourceFunction = ? AND sourceClass = ? AND ExecutableName = ?";
         String sqlVarRefs = "DELETE FROM LocalVariableReferences WHERE containingFunction = ? AND containingClass = ? AND ExecutableName = ?";
         String sqlTypeInfo = "DELETE FROM TypeInformation WHERE functionName = ? AND className = ? AND ExecutableName = ?";
-        
-        try (Connection conn = DriverManager.getConnection(url)) {
-            for (String sql : new String[]{sqlFuncRefs, sqlVarRefs, sqlTypeInfo}) {
-                try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                    pstmt.setString(1, functionName);
-                    pstmt.setString(2, className);
-                    pstmt.setString(3, executableName);
-                    pstmt.executeUpdate();
-                }
+
+        for (String sql : new String[]{sqlFuncRefs, sqlVarRefs, sqlTypeInfo}) {
+            try (PreparedStatement pstmt = transaction.prepareStatement(sql)) {
+                pstmt.setString(1, functionName);
+                pstmt.setString(2, className);
+                pstmt.setString(3, executableName);
+                pstmt.executeUpdate();
+            } catch (SQLException e) {
+                LOGGER.log(Level.SEVERE, "Error clearing function references", e);
+                e.printStackTrace();
             }
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Error clearing function references", e);
-            e.printStackTrace();
         }
     }
 
@@ -394,18 +417,17 @@ public class SQLiteDBHandler {
         return strings;
     }
 
-    public void insertFunctionReference(String sourceFunction, String sourceClass, 
-                                      String targetFunction, String targetClass, int lineNumber, String executableName) {
+    public void insertFunctionReference(Connection transaction, String sourceFunction, String sourceClass,
+                                        String targetFunction, String targetClass, int lineNumber, String executableName) {
         String sql = "INSERT INTO FunctionReferences(sourceFunction, sourceClass, "
-                   + "targetFunction, targetClass, lineNumber, ExecutableName) "
-                   + "SELECT ?, ?, ?, ?, ?, ? "
-                   + "WHERE NOT EXISTS (SELECT 1 FROM FunctionReferences "
-                   + "WHERE sourceFunction = ? AND sourceClass = ? "
-                   + "AND targetFunction = ? AND targetClass = ? "
-                   + "AND lineNumber = ? AND ExecutableName = ?)";
+                + "targetFunction, targetClass, lineNumber, ExecutableName) "
+                + "SELECT ?, ?, ?, ?, ?, ? "
+                + "WHERE NOT EXISTS (SELECT 1 FROM FunctionReferences "
+                + "WHERE sourceFunction = ? AND sourceClass = ? "
+                + "AND targetFunction = ? AND targetClass = ? "
+                + "AND lineNumber = ? AND ExecutableName = ?)";
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try (PreparedStatement pstmt = transaction.prepareStatement(sql)) {
             // Parameters for INSERT
             pstmt.setString(1, sourceFunction);
             pstmt.setString(2, sourceClass);
@@ -426,17 +448,16 @@ public class SQLiteDBHandler {
         }
     }
 
-    public void insertLocalVariableReference(String variableName, String containingFunction, 
-                                           String containingClass, int lineNumber, String executableName) {
+    public void insertLocalVariableReference(Connection transaction, String variableName, String containingFunction,
+                                             String containingClass, int lineNumber, String executableName) {
         String sql = "INSERT INTO LocalVariableReferences(variableName, containingFunction, "
-                   + "containingClass, lineNumber, ExecutableName) "
-                   + "SELECT ?, ?, ?, ?, ? "
-                   + "WHERE NOT EXISTS (SELECT 1 FROM LocalVariableReferences "
-                   + "WHERE variableName = ? AND containingFunction = ? "
-                   + "AND containingClass = ? AND lineNumber = ? AND ExecutableName = ?)";
+                + "containingClass, lineNumber, ExecutableName) "
+                + "SELECT ?, ?, ?, ?, ? "
+                + "WHERE NOT EXISTS (SELECT 1 FROM LocalVariableReferences "
+                + "WHERE variableName = ? AND containingFunction = ? "
+                + "AND containingClass = ? AND lineNumber = ? AND ExecutableName = ?)";
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try (PreparedStatement pstmt = transaction.prepareStatement(sql)) {
             // Parameters for INSERT
             pstmt.setString(1, variableName);
             pstmt.setString(2, containingFunction);
@@ -510,13 +531,12 @@ public class SQLiteDBHandler {
         return types;
     }
 
-    public void insertTypeInformation(String variableName, String variableType, 
-                                    String functionName, String className, int lineNumber, String executableName) {
+    public void insertTypeInformation(Connection transaction, String variableName, String variableType,
+                                      String functionName, String className, int lineNumber, String executableName) {
         String sql = "INSERT INTO TypeInformation(variableName, variableType, functionName, "
-                   + "className, lineNumber, ExecutableName) VALUES(?,?,?,?,?,?)";
+                + "className, lineNumber, ExecutableName) VALUES(?,?,?,?,?,?)";
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try (PreparedStatement pstmt = transaction.prepareStatement(sql)) {
             pstmt.setString(1, variableName);
             pstmt.setString(2, variableType);
             pstmt.setString(3, functionName);
