@@ -225,7 +225,7 @@ public class GhidraProject {
                         }
                         
                         // Store function decompilation with the correct class name and executable name
-                        dbHandler.updateFunctionDecompilation(functionName, className, decompiledCode, targetMacho.getMachoExecutableName());
+                        dbHandler.updateFunctionDecompilation(dbHandler.GetTransaction(), functionName, className, decompiledCode, targetMacho.getMachoExecutableName());
                         
                         // Add to class functions map
                         classToFunctions.computeIfAbsent(className, k -> new JSONArray())
@@ -243,7 +243,7 @@ public class GhidraProject {
                         // Store the mapping of original class name to "Libraries"
                         classNameMapping.put(className, "Libraries");
                         
-                        dbHandler.updateFunctionDecompilation(libraryFunctionName, "Libraries", targetMacho.getMachoExecutableName(), targetMacho.getMachoExecutableName());
+                        dbHandler.updateFunctionDecompilation(dbHandler.GetTransaction(), libraryFunctionName, "Libraries", targetMacho.getMachoExecutableName(), targetMacho.getMachoExecutableName());
                         
                         // Add to class functions map under "Libraries"
                         classToFunctions.computeIfAbsent("Libraries", k -> new JSONArray())
