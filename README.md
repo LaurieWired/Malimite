@@ -27,6 +27,21 @@ Built on top of Ghidra decompilation to offer direct support for Swift, Objectiv
 
 
 # Installation
+**Option 1: Homebrew Cask**
+
+1.  **Tap the Malimite repository:**
+
+    ```
+    brew tap LaurieWired/Malimite https://github.com/LaurieWired/Malimite.git
+    ```
+
+2.  **Install Malimite:**
+
+    ```
+    brew install --cask malimite
+    ```
+
+**Option 2: JAR File**
 
 A precompiled JAR file is provided in the [Releases Page](https://github.com/LaurieWired/Malimite/releases/)
 
