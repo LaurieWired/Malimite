@@ -24,6 +24,7 @@ out/
 # Java-specific files
 *.class
 *.jar
+!ghidra.jar
 *.war
 *.ear
 *.log
