@@ -95,6 +95,7 @@ public class SyntaxParser {
 
                 // Store the function reference with adjusted line number
                 dbHandler.insertFunctionReference(
+                    dbHandler.GetTransaction(),
                     currentFunction,
                     currentClass,
                     calledFunction,
@@ -137,6 +138,7 @@ public class SyntaxParser {
                         
                         // Store the type information
                         dbHandler.insertTypeInformation(
+                            dbHandler.GetTransaction(),
                             variableName,
                             variableType,
                             currentFunction,
@@ -147,6 +149,7 @@ public class SyntaxParser {
 
                         // Store initial local variable reference
                         dbHandler.insertLocalVariableReference(
+                            dbHandler.GetTransaction(),
                             variableName,
                             currentFunction,
                             currentClass,
@@ -173,6 +176,7 @@ public class SyntaxParser {
                 
                 // Store class usage reference
                 dbHandler.insertFunctionReference(
+                    dbHandler.GetTransaction(),
                     currentFunction,
                     currentClass,
                     null,  // No specific function
@@ -186,6 +190,7 @@ public class SyntaxParser {
                 // Check if this identifier is in a function call context
                 if (!isPartOfFunctionCall(ctx)) {
                     dbHandler.insertLocalVariableReference(
+                        dbHandler.GetTransaction(),
                         identifier,
                         currentFunction,
                         currentClass,
