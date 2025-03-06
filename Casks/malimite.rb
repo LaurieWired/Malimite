@@ -1,6 +1,6 @@
 cask "malimite" do
   version "1.1"
-  sha256 "a74fd75844aedec13b523da6f8faaf9ec0c2a37027c4e372f74294ea07069528"
+  sha256 "96e14ef24c3f46064383b36f3b9ca549be659dad1a46439c709ed79f370a5f5c"
 
   url "https://github.com/LaurieWired/Malimite/releases/download/#{version}/Malimite-1-1.zip"
   name "Malimite"
