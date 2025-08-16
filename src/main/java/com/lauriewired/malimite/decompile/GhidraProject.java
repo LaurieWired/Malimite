@@ -17,6 +17,7 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 
 import java.util.function.Consumer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -165,9 +166,17 @@ public class GhidraProject {
                     functionDataBuilder.append(line).append("\n");
                 }
 
+                // Add this new section to process strings
+                LOGGER.info("Reading string data from Ghidra script");
+                StringBuilder stringDataBuilder = new StringBuilder();
+                while (!(line = in.readLine()).equals("END_STRING_DATA")) {
+                    stringDataBuilder.append(line).append("\n");
+                }
+
                 // Process and store the received data
                 JSONArray classData = new JSONArray(classDataBuilder.toString());
                 JSONArray functionData = new JSONArray(functionDataBuilder.toString());
+                JSONArray stringData = new JSONArray(stringDataBuilder.toString());
                 LOGGER.info("Processing " + classData.length() + " classes and " + functionData.length() + " functions from Ghidra analysis");
                 
                 // Process both class and function data together
@@ -175,12 +184,16 @@ public class GhidraProject {
                 Map<String, String> classNameMapping = new HashMap<>();
 
                 // First pass: organize functions by class and demangle class names
-                for (int i = 0; i < functionData.length(); i++) {
-                    JSONObject functionObj = functionData.getJSONObject(i);
+                // Use parallelStream to process functionData in parallel
+                ArrayList<SQLiteDBHandler.DecompilationResult> decompilationResults = new ArrayList<>();
+                ArrayList<SyntaxParser> syntaxParsers = new ArrayList<>();
+
+                functionData.toList().parallelStream().forEach(obj -> {
+                    JSONObject functionObj = new JSONObject((Map<?, ?>) obj);
                     String functionName = functionObj.getString("FunctionName");
                     String className = functionObj.getString("ClassName");
                     String decompiledCode = functionObj.getString("DecompiledCode");
-                    
+
                     // For Swift binaries, get the class name from the function name
                     if (!config.isMac() && targetMacho.isSwift() && functionName.startsWith("_$s")) {
                         DemangleSwift.DemangledName demangledName = DemangleSwift.demangleSwiftName(functionName);
@@ -193,12 +206,12 @@ public class GhidraProject {
                             LOGGER.warning("Failed to demangle Swift symbol: " + functionName);
                         }
                     }
-                    
+
                     // Replace empty class name with "Global" after demangling
                     if (className == null || className.trim().isEmpty()) {
                         className = "Global";
                     }
-                    
+
                     // Check if this class should be treated as a library
                     final String finalClassName = className;
                     boolean isLibrary = activeLibraries.stream()
@@ -207,7 +220,7 @@ public class GhidraProject {
                     if (!isLibrary) {
                         // Process and store the decompiled code only for non-library classes
                         decompiledCode = decompiledCode.replaceAll("/\\*.*\\*/", "");  // Remove Ghidra comments
-                        
+
                         // Add headers with the correct class name
                         if (!decompiledCode.trim().startsWith("// Class:") && !decompiledCode.trim().startsWith("// Function:")) {
                             StringBuilder contentBuilder = new StringBuilder();
@@ -217,19 +230,31 @@ public class GhidraProject {
                             decompiledCode = contentBuilder.toString();
                         }
 
-                        // Store function decompilation with the correct class name
                         String message = "Storing decompilation for " + className + "::" + functionName;
                         LOGGER.info(message);
                         if (consoleOutputCallback != null) {
                             consoleOutputCallback.accept(message);
                         }
-                        
+
                         // Store function decompilation with the correct class name and executable name
-                        dbHandler.updateFunctionDecompilation(dbHandler.GetTransaction(), functionName, className, decompiledCode, targetMacho.getMachoExecutableName());
-                        
+                        synchronized (decompilationResults) {
+                            decompilationResults.add(new SQLiteDBHandler.DecompilationResult(functionName, className, decompiledCode, targetMacho.getMachoExecutableName()));
+                        }
+                        if (decompiledCode != null && !decompiledCode.trim().isEmpty()) {
+                            // Parse the decompiled code for syntax information
+                            SyntaxParser syntaxParser = new SyntaxParser(targetMacho.getMachoExecutableName());
+                            syntaxParser.setContext(functionName, className);
+                            syntaxParser.collectCrossReferences(decompiledCode);
+                            synchronized (syntaxParsers) {
+                                syntaxParsers.add(syntaxParser);
+                            }
+                        }
+
                         // Add to class functions map
-                        classToFunctions.computeIfAbsent(className, k -> new JSONArray())
-                                        .put(functionName);
+                        synchronized (classToFunctions) {
+                            classToFunctions.computeIfAbsent(className, k -> new JSONArray())
+                                            .put(functionName);
+                        }
                     } else {
                         // For library functions, combine class and function names and store under "Libraries"
                         String libraryFunctionName = className + "::" + functionName;
@@ -239,17 +264,37 @@ public class GhidraProject {
                             consoleOutputCallback.accept(message);
                         }
                         functionName = libraryFunctionName;
-                        
+
                         // Store the mapping of original class name to "Libraries"
-                        classNameMapping.put(className, "Libraries");
-                        
-                        dbHandler.updateFunctionDecompilation(dbHandler.GetTransaction(), libraryFunctionName, "Libraries", targetMacho.getMachoExecutableName(), targetMacho.getMachoExecutableName());
-                        
+                        synchronized (classNameMapping) {
+                            classNameMapping.put(className, "Libraries");
+                        }
+
+
+                        synchronized (decompilationResults) {
+                            decompilationResults.add(new SQLiteDBHandler.DecompilationResult(libraryFunctionName, "Libraries", targetMacho.getMachoExecutableName(), targetMacho.getMachoExecutableName()));
+                        }
+
                         // Add to class functions map under "Libraries"
-                        classToFunctions.computeIfAbsent("Libraries", k -> new JSONArray())
-                                        .put(libraryFunctionName);
+                        synchronized (classToFunctions) {
+                            classToFunctions.computeIfAbsent("Libraries", k -> new JSONArray())
+                                            .put(libraryFunctionName);
+                        }
                     }
+                });
+
+                ArrayList<SyntaxParser.TypeInfoResult> typeInfoResults = new ArrayList<>();
+                ArrayList<SyntaxParser.FunctionRefResult> functionRefResults = new ArrayList<>();
+                ArrayList<SyntaxParser.VariableRefResult> varRefs = new ArrayList<>();
+                for (SyntaxParser parser : syntaxParsers) {
+                    typeInfoResults.addAll(parser.getTypeInfoResults());
+                    functionRefResults.addAll(parser.getFunctionRefResults());
+                    varRefs.addAll(parser.getVariableRefResults());
                 }
+                dbHandler.insertFunctionDecompilations(decompilationResults);
+                dbHandler.insertTypeInformations(typeInfoResults);
+                dbHandler.insertFunctionReferences(functionRefResults);
+                dbHandler.insertLocalVariableReferences(varRefs);
 
                 // Store class data for all classes (including libraries)
                 for (Map.Entry<String, JSONArray> entry : classToFunctions.entrySet()) {
@@ -259,15 +304,7 @@ public class GhidraProject {
                     dbHandler.insertClass(className, functions.toString(), targetMacho.getMachoExecutableName());
                 }
 
-                // Add this new section to process strings
-                LOGGER.info("Reading string data from Ghidra script");
-                StringBuilder stringDataBuilder = new StringBuilder();
-                while (!(line = in.readLine()).equals("END_STRING_DATA")) {
-                    stringDataBuilder.append(line).append("\n");
-                }
-
                 // Process string data
-                JSONArray stringData = new JSONArray(stringDataBuilder.toString());
                 LOGGER.info("Processing " + stringData.length() + " strings from Ghidra analysis");
 
                 for (int i = 0; i < stringData.length(); i++) {
@@ -300,4 +337,5 @@ public class GhidraProject {
         LOGGER.info("Using analyzeHeadless path: " + analyzeHeadless);
         return analyzeHeadless;
     }
+
 }
