@@ -510,27 +510,16 @@ public class SQLiteDBHandler {
     }
 
     public void insertLocalVariableReferences(List<SyntaxParser.VariableRefResult> refs) {
-        String sql = "INSERT INTO LocalVariableReferences(variableName, containingFunction, "
-                + "containingClass, lineNumber, ExecutableName) "
-                + "VALUES (?, ?, ?, ?, ?) "
-                + "WHERE NOT EXISTS (SELECT 1 FROM LocalVariableReferences "
-                + "WHERE variableName = ? AND containingFunction = ? "
-                + "AND containingClass = ? AND lineNumber = ? AND ExecutableName = ?)";
+        String sql = "INSERT OR IGNORE INTO LocalVariableReferences(variableName, containingFunction, "
+                + "containingClass, lineNumber, ExecutableName) VALUES (?, ?, ?, ?, ?)";
 
         try (PreparedStatement pstmt = this.transaction.prepareStatement(sql)) {
             for (SyntaxParser.VariableRefResult ref : refs) {
-                // Parameters for INSERT
                 pstmt.setString(1, ref.variableName);
                 pstmt.setString(2, ref.functionName);
                 pstmt.setString(3, ref.className);
                 pstmt.setInt(4, ref.lineNumber);
                 pstmt.setString(5, ref.executableName);
-                // Parameters for WHERE NOT EXISTS
-                pstmt.setString(6, ref.variableName);
-                pstmt.setString(7, ref.functionName);
-                pstmt.setString(8, ref.className);
-                pstmt.setInt(9, ref.lineNumber);
-                pstmt.setString(10, ref.executableName);
                 pstmt.addBatch();
             }
             pstmt.executeBatch();
