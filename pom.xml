@@ -1,5 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.lauriewired.malimite</groupId>
   <artifactId>malimite</artifactId>
@@ -22,9 +24,9 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-        <groupId>com.googlecode.plist</groupId>
-        <artifactId>dd-plist</artifactId>
-        <version>1.27</version>
+      <groupId>com.googlecode.plist</groupId>
+      <artifactId>dd-plist</artifactId>
+      <version>1.27</version>
     </dependency>
     <dependency>
       <groupId>com.google.code.gson</groupId>
@@ -32,24 +34,24 @@
       <version>2.10.1</version>
     </dependency>
     <dependency>
-        <groupId>org.xerial</groupId>
-        <artifactId>sqlite-jdbc</artifactId>
-        <version>3.44.1.0</version>
+      <groupId>org.xerial</groupId>
+      <artifactId>sqlite-jdbc</artifactId>
+      <version>3.44.1.0</version>
     </dependency>
     <dependency>
-        <groupId>org.json</groupId>
-        <artifactId>json</artifactId>
-        <version>20231013</version>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>20231013</version>
     </dependency>
     <dependency>
-        <groupId>org.antlr</groupId>
-        <artifactId>antlr4-runtime</artifactId>
-        <version>4.13.1</version>
+      <groupId>org.antlr</groupId>
+      <artifactId>antlr4-runtime</artifactId>
+      <version>4.13.1</version>
     </dependency>
     <dependency>
-        <groupId>com.fifesoft</groupId>
-        <artifactId>rsyntaxtextarea</artifactId>
-        <version>3.4.0</version>
+      <groupId>com.fifesoft</groupId>
+      <artifactId>rsyntaxtextarea</artifactId>
+      <version>3.4.0</version>
     </dependency>
     <dependency>
       <groupId>com.formdev</groupId>
@@ -133,39 +135,65 @@
         </configuration>
       </plugin>
 
+      <!-- Resources Plugin -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>3.3.1</version>
+        <executions>
+          <execution>
+            <id>copy-resources</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}/DecompilerBridge</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${basedir}/DecompilerBridge</directory>
+                  <filtering>false</filtering>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
       <!-- Shade Plugin -->
-<plugin>
-  <groupId>org.apache.maven.plugins</groupId>
-  <artifactId>maven-shade-plugin</artifactId>
-  <version>3.5.0</version>
-  <executions>
-    <execution>
-      <phase>package</phase>
-      <goals>
-        <goal>shade</goal>
-      </goals>
-      <configuration>
-        <filters>
-          <filter>
-            <artifact>*:*</artifact>
-            <!-- Exclude signature files -->
-            <excludes>
-              <exclude>META-INF/*.SF</exclude>
-              <exclude>META-INF/*.DSA</exclude>
-              <exclude>META-INF/*.RSA</exclude>
-            </excludes>
-          </filter>
-        </filters>
-        <transformers>
-          <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-            <mainClass>com.lauriewired.malimite.Malimite</mainClass>
-          </transformer>
-        </transformers>
-      </configuration>
-    </execution>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <!-- Exclude signature files -->
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>com.lauriewired.malimite.Malimite</mainClass>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>
+    
     <resources>
       <resource>
         <directory>src/main/resources</directory>
