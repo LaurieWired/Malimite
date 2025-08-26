@@ -71,13 +71,6 @@
       <artifactId>flexmark-all</artifactId>
       <version>0.64.8</version>
     </dependency>
-    <dependency>
-      <groupId>ghidra</groupId>
-      <artifactId>ghidra</artifactId>
-      <version>11.3.1</version>
-      <scope>system</scope>
-      <systemPath>${project.basedir}/lib/ghidra.jar</systemPath>
-    </dependency>
   </dependencies>
 
   <build>
