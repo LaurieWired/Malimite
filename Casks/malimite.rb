@@ -1,8 +1,8 @@
 cask "malimite" do
-  version "1.1"
-  sha256 "a74fd75844aedec13b523da6f8faaf9ec0c2a37027c4e372f74294ea07069528"
+  version "1.2"
+  sha256 "25a01b75f59e21e129340836eeb7956ec29cf64f4bea48cad13af1ff06bf35b2"
 
-  url "https://github.com/LaurieWired/Malimite/releases/download/#{version}/Malimite-1-1.zip"
+  url "https://github.com/LaurieWired/Malimite/releases/download/#{version}/Malimite-#{version.dots_to_hyphens}.zip"
   name "Malimite"
   desc "Decompiler for Apple applications"
   homepage "https://github.com/LaurieWired/Malimite"
@@ -18,7 +18,7 @@ cask "malimite" do
 
     File.write(bin, <<~EOS)
       #!/bin/bash
-      exec java -jar "#{libexec}/Malimite-1-1.jar" "$@"
+      exec java -jar "#{libexec}/Malimite-#{version.dots_to_hyphens}.jar" "$@"
     EOS
     FileUtils.chmod("+x", bin)
   end
